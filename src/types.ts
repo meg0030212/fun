@@ -73,6 +73,8 @@ export interface Property {
   type: PropType;
   options?: SelectOption[];
   numberFormat?: 'number' | 'percent' | 'dollar' | 'twd' | 'comma';
+  dateFormat?: 'full' | 'short' | 'slash' | 'iso' | 'relative';
+  timeFormat?: '24h' | '12h';
 }
 
 export type ViewType = 'table' | 'board' | 'list' | 'gallery' | 'calendar';
@@ -100,6 +102,8 @@ export interface View {
   hidden: string[];
   widths: Record<string, number>;
   calcs?: Record<string, string>;
+  /** calendar layout */
+  calMode?: 'month' | 'week';
   cardPreview?: 'none' | 'cover' | 'content';
 }
 

@@ -81,8 +81,37 @@ export function parseCsv(text: string): string[][] {
 
 const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
 
+/** Notion dates may carry a time ("3:00 PM", "15:00", "下午 3:00") and a range ("A → B") */
+function parseTime(rest: string): string | null {
+  const m = /(上午|下午|AM|PM|am|pm)?\s*(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/.exec(rest);
+  if (!m) return null;
+  let h = +m[2];
+  const ap = (m[1] || m[4] || '').toLowerCase();
+  if ((ap === 'pm' || ap === '下午') && h < 12) h += 12;
+  if ((ap === 'am' || ap === '上午') && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${m[3]}`;
+}
+
 export function parseAnyDate(v: string): string | null {
-  const s = v.split('→')[0].trim();
+  const [a, b] = v.split('→').map((x) => x.trim());
+  const start = parseOneDate(a || '');
+  if (!start) return null;
+  if (!b) return start;
+  // "November 23, 2026 9:00 AM → 11:00 AM" keeps the start day
+  const end = parseOneDate(b) || (parseTime(b) ? `${start.slice(0, 10)}T${parseTime(b)}` : null);
+  return end ? `${start}/${end}` : start;
+}
+
+function parseOneDate(raw: string): string | null {
+  const day = parseDayOnly(raw);
+  if (!day) return null;
+  const rest = raw.replace(/^[^\d]*\d{4}[^\d]+\d{1,2}[^\d]+\d{1,2}[^\s]*|^\d{1,2}[^\d]+\d{1,2}[^\d]+\d{4}[^\s]*|^[A-Za-z]+\.?\s+\d{1,2},?\s+\d{4}|^\d{1,2}\s+[A-Za-z]+\.?,?\s+\d{4}/, '');
+  const t = parseTime(rest);
+  return t ? `${day}T${t}` : day;
+}
+
+function parseDayOnly(v: string): string | null {
+  const s = v.trim();
   if (!s) return null;
   let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(s);
   if (m) return toISODate(new Date(+m[1], +m[2] - 1, +m[3]));

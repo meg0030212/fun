@@ -1,5 +1,6 @@
 import type { Database, Filter, Page, Property, PropType, View } from '../../types';
-import { formatDate, formatDateTime, parseISODate } from '../../utils';
+import { formatDateTime, parseISODate } from '../../utils';
+import { formatDateValue, startTime } from '../../dates';
 
 export const PROP_TYPES: { type: PropType; label: string }[] = [
   { type: 'text', label: '文字' },
@@ -44,7 +45,7 @@ export function displayText(row: Page, prop: Property): string {
   switch (prop.type) {
     case 'select': case 'status': return optionName(prop, v);
     case 'multi_select': return (v as string[]).map((id) => optionName(prop, id)).filter(Boolean).join(', ');
-    case 'date': return formatDate(v);
+    case 'date': return formatDateValue(v, prop);
     case 'checkbox': return v ? '✓' : '';
     case 'created_time': case 'last_edited_time': return formatDateTime(v);
     case 'number': return formatNumber(v, prop);
@@ -164,7 +165,7 @@ function sortKey(row: Page, prop: Property): any {
     case 'select': case 'status': return prop.options?.findIndex((o) => o.id === v) ?? 0;
     case 'multi_select': return (v as string[]).map((id) => optionName(prop, id)).join(',');
     case 'checkbox': return v ? 1 : 0;
-    case 'date': return dayNum(v);
+    case 'date': return startTime(v);
     default: return typeof v === 'string' ? v.toLowerCase() : v;
   }
 }
