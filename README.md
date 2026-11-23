@@ -47,6 +47,19 @@ npm run build:single  # 產生單一 HTML 檔 dist-single/index.html
 - 淺色／深色／跟隨系統主題、繁體中文介面、手機版自適應
 - 設定：個人名稱、工作區名稱、主題、匯出／匯入整個工作區 JSON 備份、重設
 
+## 同步到 Google 雲端硬碟
+
+在「設定 → 同步」（或側邊欄底部的雲朵圖示）開啟。有兩種方式：
+
+1. **Google 雲端硬碟（網頁連線，建議）**：電腦、手機、平板都能用。工作區存成雲端硬碟中的「Lumen 筆記工作區.json」。需要先在 Google Cloud Console 建立一次 OAuth 用戶端 ID（設定頁面內有逐步說明），並把 Lumen 的網址加入「已授權的 JavaScript 來源」。
+2. **電腦上的 Google 雲端硬碟資料夾（免設定）**：安裝「Google 雲端硬碟電腦版」後，把同步檔案建立在「Google 雲端硬碟」資料夾中即可。僅支援電腦版 Chrome／Edge。
+
+合併規則：每個頁面與資料庫各自保留最後修改的版本；永久刪除會同步到其他裝置；新裝置若只有範例內容，會直接採用雲端資料。
+
+## 部署（GitHub Pages）
+
+推送到 `main` 時，`.github/workflows/deploy.yml` 會自動建置並發佈到 GitHub Pages。第一次使用前，請到倉庫的 **Settings → Pages**，把 **Source** 設為 **GitHub Actions**。發佈網址為 `https://<帳號>.github.io/<倉庫名稱>/`。
+
 ## 鍵盤快速鍵
 
 | 快速鍵 | 功能 |
@@ -64,7 +77,7 @@ npm run build:single  # 產生單一 HTML 檔 dist-single/index.html
 
 ## 與 Notion 的差異
 
-此為單機版本，資料只存在目前的瀏覽器中。以下需要伺服器的功能未包含：多人即時協作、帳號與權限、發佈到網路、AI、跨裝置同步、資料庫的公式／關聯／彙總屬性、時間軸檢視。
+資料存在瀏覽器中，可透過 Google 雲端硬碟在多個裝置間同步。以下功能未包含：多人即時協作（同時編輯同一頁面時以較晚儲存者為準）、帳號與權限、發佈到網路、AI、資料庫的公式／關聯／彙總屬性、時間軸檢視。
 
 ## 專案結構
 
@@ -74,6 +87,7 @@ src/
   seed.ts           首次開啟的範例內容
   templates.ts      範本
   markdown.ts       Markdown 匯入／匯出
+  sync/             Google 雲端硬碟與本機檔案同步、合併邏輯
   components/
     Editor.tsx      區塊編輯器（鍵盤、拖放、選取、指令選單）
     Blocks.tsx      圖片、嵌入、方程式、表格等區塊

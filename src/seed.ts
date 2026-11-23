@@ -145,5 +145,6 @@ export function seedState(): State {
     dbs: { [tasksDb.id]: tasksDb },
     settings: { theme: 'system', workspaceName: '我的工作區', userName: '我', sidebarWidth: 240, sidebarOpen: true },
     recent: [welcomeId],
+    pristine: true,
   };
 }
