@@ -75,6 +75,8 @@ export interface Property {
   numberFormat?: 'number' | 'percent' | 'dollar' | 'twd' | 'comma';
   dateFormat?: 'full' | 'short' | 'slash' | 'iso' | 'relative';
   timeFormat?: '24h' | '12h';
+  /** date picker shortcuts: "HH:mm" or a slot "HH:mm-HH:mm" */
+  quickTimes?: string[];
 }
 
 export type ViewType = 'table' | 'board' | 'list' | 'gallery' | 'calendar';

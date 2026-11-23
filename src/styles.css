@@ -614,13 +614,18 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .date-field { display: flex; gap: 4px; border-radius: 6px; padding: 2px; }
 .date-field.active { box-shadow: 0 0 0 2px var(--blue-soft); }
 .date-field .input { flex: 1; min-width: 0; }
-.date-field .input.time { flex: 0 0 96px; }
+.date-field .input.time { flex: 0 0 118px; }
 .date-arrow { text-align: center; color: var(--text-3); font-size: 12px; line-height: 1; }
 .mini-day.range { background: var(--blue-soft); border-radius: 0; }
 .date-toggles { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; }
 .date-toggles .menu-row { padding: 2px 4px; min-height: 30px; cursor: pointer; border-radius: 4px; font-size: 13px; }
 .date-toggles .menu-row:hover { background: var(--bg-hover); }
 .quick-times { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; }
+.quick-times .btn-chip.editing { color: var(--text); }
+.quick-times .btn-chip.editing:hover { color: var(--red); }
+.quick-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px 4px; margin: 2px 0; border-radius: 6px; background: var(--bg-hover); }
+.quick-edit-row { display: flex; align-items: center; gap: 4px; }
+.quick-edit-row .input.time { flex: 1; min-width: 0; }
 .date-preview { padding: 6px 4px 0; }
 .seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; margin-right: 6px; }
 .seg button { border: 0; background: transparent; padding: 3px 10px; cursor: pointer; font-size: 13px; color: var(--text-2); }
