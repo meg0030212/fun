@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { State } from '../types';
 import { createPage, getState, isTrashed, patchPage, replaceState, updateSettings, useStore } from '../store';
-import { navigate, openPeek, setUI, toast, useUI } from '../ui';
+import { askConfirm, navigate, openPeek, setUI, toast, useUI } from '../ui';
 import { downloadFile, formatDateTime, htmlToText, pickFile, readFileAsText, timeAgo, toISODate, uid } from '../utils';
 import { Icon } from './Icons';
 import { Modal } from './Popover';
@@ -114,11 +114,11 @@ export function SettingsModal() {
     try {
       const s = JSON.parse(await readFileAsText(f)) as State;
       if (!s.pages || !s.dbs || !s.settings) throw new Error('bad');
-      if (!confirm('匯入將取代目前所有資料，確定嗎？')) return;
+      if (!(await askConfirm('匯入將取代目前所有資料，確定嗎？', '匯入並取代'))) return;
       replaceState(s);
       navigate('home');
       toast('已匯入工作區');
-    } catch { alert('檔案格式不正確'); }
+    } catch { toast('無法匯入：檔案不是有效的 Lumen 備份 JSON'); }
   };
 
   const tabs = [
@@ -181,7 +181,7 @@ export function SettingsModal() {
               </div>
               <div className="set-line">
                 <div><div className="danger-text">重設工作區</div><div className="muted small">刪除所有資料並還原為範例內容。</div></div>
-                <button className="btn-outline sm danger" onClick={() => { if (confirm('確定要刪除所有資料嗎？此操作無法復原（除非你有備份）。')) { replaceState(seedState()); navigate('home'); } }}>重設</button>
+                <button className="btn-outline sm danger" onClick={async () => { if (await askConfirm('確定要刪除所有資料並還原為範例內容嗎？除非你有備份，否則無法復原。', '重設工作區')) { replaceState(seedState()); navigate('home'); } }}>重設</button>
               </div>
             </>
           )}
@@ -382,6 +382,21 @@ export function Home() {
         </div>
       </section>
     </div>
+  );
+}
+
+export function ConfirmDialog() {
+  const c = useUI((u) => u.confirm);
+  if (!c) return null;
+  const done = (ok: boolean) => { setUI({ confirm: null }); c.resolve(ok); };
+  return (
+    <Modal onClose={() => done(false)} width={340} className="confirm-modal">
+      <div className="confirm-body">
+        <div className="confirm-msg">{c.message}</div>
+        <button className="btn-danger" autoFocus onClick={() => done(true)}>{c.action}</button>
+        <button className="btn-outline" onClick={() => done(false)}>取消</button>
+      </div>
+    </Modal>
   );
 }
 

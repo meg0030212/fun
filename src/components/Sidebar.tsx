@@ -4,7 +4,7 @@ import {
   createPage, deletePageForever, duplicatePage, emptyTrash, getState, isTrashed, movePage, patchPage, restorePage, trashPage,
   updateSettings, useStore,
 } from '../store';
-import { navigate, pageLink, setUI, toast, useUI } from '../ui';
+import { askConfirm, navigate, pageLink, setUI, toast, useUI } from '../ui';
 import { Icon } from './Icons';
 import { PageIcon } from './EmojiPicker';
 import { MenuItem, MenuSep, Popover, MenuHeader, Anchor } from './Popover';
@@ -312,7 +312,7 @@ function TrashPopover({ anchor, onClose }: { anchor: Anchor; onClose: () => void
             </span>
             <span className="menu-right">
               <button className="btn-icon xs" title="還原" onClick={(e) => { e.stopPropagation(); restorePage(p.id); toast('已還原'); }}><Icon.undo size={14} /></button>
-              <button className="btn-icon xs" title="永久刪除" onClick={(e) => { e.stopPropagation(); if (confirm(`確定要永久刪除「${p.title || '未命名'}」嗎？`)) deletePageForever(p.id); }}><Icon.trash size={14} /></button>
+              <button className="btn-icon xs" title="永久刪除" onClick={async (e) => { e.stopPropagation(); if (await askConfirm(`確定要永久刪除「${p.title || '未命名'}」嗎？此操作無法復原。`, '永久刪除')) deletePageForever(p.id); }}><Icon.trash size={14} /></button>
             </span>
           </div>
         ))}
@@ -320,7 +320,7 @@ function TrashPopover({ anchor, onClose }: { anchor: Anchor; onClose: () => void
       {trashed.length > 0 && (
         <div className="trash-foot">
           <span className="muted small">垃圾桶中的頁面可隨時還原</span>
-          <button className="btn-ghost sm danger" onClick={() => { if (confirm('確定要清空垃圾桶嗎？此操作無法復原。')) emptyTrash(); }}>清空垃圾桶</button>
+          <button className="btn-ghost sm danger" onClick={async () => { if (await askConfirm('確定要清空垃圾桶嗎？其中的頁面將被永久刪除。', '清空垃圾桶')) emptyTrash(); }}>清空垃圾桶</button>
         </div>
       )}
     </Popover>

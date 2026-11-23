@@ -9,13 +9,15 @@ export interface UIState {
   templates: boolean;
   comments: boolean;
   toast: string | null;
+  confirm: { message: string; action: string; resolve: (ok: boolean) => void } | null;
 }
 
-let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, comments: false, toast: null };
+let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, comments: false, toast: null, confirm: null };
 const ls = new Set<() => void>();
 
 function parseHash(): string {
   const h = window.location.hash.replace(/^#\/?/, '');
+  if (h.startsWith('p-')) return decodeURIComponent(h.slice(2));
   return decodeURIComponent(h.split('?')[0]) || 'home';
 }
 
@@ -32,9 +34,18 @@ export function getUI() { return ui; }
 
 window.addEventListener('hashchange', () => setUI({ route: parseHash(), peek: null }));
 
+export function hashFor(id: string) {
+  return id === 'home' ? '#home' : '#p-' + id;
+}
+
 export function navigate(id: string) {
-  if (window.location.hash !== '#/' + id) window.location.hash = '#/' + id;
+  if (window.location.hash !== hashFor(id)) window.location.hash = hashFor(id);
   else setUI({ route: id, peek: null });
+}
+
+/** in-app confirmation dialog (native confirm() is unavailable in sandboxed frames) */
+export function askConfirm(message: string, action = '確定'): Promise<boolean> {
+  return new Promise((resolve) => setUI({ confirm: { message, action, resolve } }));
 }
 
 export function openPeek(id: string | null) { setUI({ peek: id }); }
@@ -47,5 +58,5 @@ export function toast(msg: string) {
 }
 
 export function pageLink(id: string) {
-  return `${window.location.origin}${window.location.pathname}#/${id}`;
+  return `${window.location.origin}${window.location.pathname}${hashFor(id)}`;
 }

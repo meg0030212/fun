@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Page } from '../types';
 import { deletePageForever, getState, isTrashed, newBlock, patchPage, restorePage, setBlocks, useStore } from '../store';
-import { navigate, setUI, useUI } from '../ui';
+import { askConfirm, navigate, setUI, useUI } from '../ui';
 import { pickFile, readFileAsDataURL, setCaret } from '../utils';
 
 /** focus a block's editable as soon as React has committed it */
@@ -105,7 +105,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
             const s = getState();
             while (cur) { if (cur.trashed) { restorePage(cur.id); break; } cur = cur.parentId ? s.pages[cur.parentId] : (cur.rowOf ? s.pages[s.dbs[cur.rowOf]?.hostPageId] : undefined); }
           }}>還原頁面</button>
-          {page.trashed && <button className="btn-outline-light" onClick={() => { if (confirm('確定永久刪除？此操作無法復原。')) { deletePageForever(page.id); navigate('home'); } }}>永久刪除</button>}
+          {page.trashed && <button className="btn-outline-light" onClick={async () => { if (await askConfirm('確定要永久刪除此頁面嗎？此操作無法復原。', '永久刪除')) { deletePageForever(page.id); navigate('home'); } }}>永久刪除</button>}
         </div>
       )}
       {page.cover && (

@@ -116,7 +116,7 @@ export function blocksToMarkdown(page: Page, s: State): string {
       case 'equation': lines.push('$$', b.html, '$$'); break;
       case 'image': lines.push(`![${b.caption || ''}](${b.url || ''})`); break;
       case 'bookmark': case 'embed': case 'video': lines.push(b.url ? `[${b.url}](${b.url})` : ''); break;
-      case 'page': { const p = b.pageId ? s.pages[b.pageId] : null; if (p) lines.push(`[${p.icon || ''} ${p.title || '未命名'}](#/${p.id})`); break; }
+      case 'page': { const p = b.pageId ? s.pages[b.pageId] : null; if (p) lines.push(`[${p.icon || ''} ${p.title || '未命名'}](#p-${p.id})`); break; }
       case 'database': { const db = b.dbId ? s.dbs[b.dbId] : null; lines.push(`*資料庫：${db?.title || '未命名'}*`); break; }
       case 'table': {
         const rows = b.rows || [];

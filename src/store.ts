@@ -30,7 +30,7 @@ function scheduleSave() {
     } catch {
       if (!warned) {
         warned = true;
-        alert('儲存空間已滿，部分變更可能無法保存。請刪除大型圖片或匯出工作區備份。');
+        window.dispatchEvent(new CustomEvent('lumen:toast', { detail: '儲存空間已滿，部分變更可能無法保存。請刪除大型圖片或匯出工作區備份。' }));
       }
     }
   }, 250);

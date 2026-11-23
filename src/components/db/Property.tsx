@@ -3,6 +3,7 @@ import type { Database, Page, Property, PropType, SelectOption, View } from '../
 import { setRowProp, patchPage, updateDb, updateView, makeProp } from '../../store';
 import { COLORS, COLOR_NAMES, formatDate, formatDateTime, safeUrl, toISODate, uid, parseISODate } from '../../utils';
 import { Popover, MenuItem, MenuSep, MenuHeader, Anchor } from '../Popover';
+import { askConfirm } from '../../ui';
 import { Icon } from '../Icons';
 import { formatNumber, getValue, PROP_TYPES, propTypeLabel } from './dbutils';
 
@@ -340,8 +341,9 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
             updateDb(db.id, (d) => { const i = d.properties.findIndex((x) => x.id === prop.id); d.properties.splice(i + 1, 0, { ...JSON.parse(JSON.stringify(prop)), id: uid(), name: prop.name + ' (副本)' }); });
             onClose();
           }} />
-          <MenuItem icon={<Icon.trash />} label="刪除屬性" danger onClick={() => {
-            if (!confirm(`確定要刪除屬性「${prop.name}」嗎？`)) return;
+          <MenuItem icon={<Icon.trash />} label="刪除屬性" danger onClick={async () => {
+            onClose();
+            if (!(await askConfirm(`確定要刪除屬性「${prop.name}」嗎？所有資料列中的此欄位值都會被移除。`, '刪除屬性'))) return;
             updateDb(db.id, (d) => {
               d.properties = d.properties.filter((x) => x.id !== prop.id);
               d.views.forEach((v) => {

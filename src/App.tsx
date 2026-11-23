@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { redo, undo, updateSettings, useStore, visitPage, getState } from './store';
-import { setUI, useUI } from './ui';
+import { setUI, toast, useUI } from './ui';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { PageView } from './components/PageView';
-import { CommentsPanel, Home, PeekModal, SearchModal, SettingsModal, TemplatesModal, Toast } from './components/Panels';
+import { CommentsPanel, ConfirmDialog, Home, PeekModal, SearchModal, SettingsModal, TemplatesModal, Toast } from './components/Panels';
 import { FormatToolbar } from './components/FormatToolbar';
 
 function useTheme() {
@@ -43,6 +43,12 @@ export default function App() {
       document.title = `${page.icon && !/^(https?:|data:)/.test(page.icon) ? page.icon + ' ' : ''}${page.title || '未命名'} · Lumen`;
     } else document.title = 'Lumen 筆記';
   }, [route, page?.title, page?.icon]); // eslint-disable-line
+
+  useEffect(() => {
+    const onToast = (e: Event) => toast((e as CustomEvent).detail);
+    window.addEventListener('lumen:toast', onToast);
+    return () => window.removeEventListener('lumen:toast', onToast);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,6 +98,7 @@ export default function App() {
       {settings && <SettingsModal />}
       {templates && <TemplatesModal />}
       <FormatToolbar />
+      <ConfirmDialog />
       <Toast />
     </div>
   );

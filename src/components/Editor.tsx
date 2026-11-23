@@ -286,7 +286,7 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
     if (item.kind === 'new') pid = createPage({ parentId: pageId, title: item.title, addLinkInParent: false });
     const p = getState().pages[pid!];
     const icon = p?.icon && !/^(https?:|data:)/.test(p.icon) ? p.icon : '📄';
-    insertInlineHtml(el, blockId, `<a class="mention" contenteditable="false" data-page-id="${pid}" href="#/${pid}"><span class="mention-icon">${icon}</span><span class="mention-title">${escapeHtml(p?.title || '未命名')}</span></a>`);
+    insertInlineHtml(el, blockId, `<a class="mention" contenteditable="false" data-page-id="${pid}" href="#p-${pid}"><span class="mention-icon">${icon}</span><span class="mention-title">${escapeHtml(p?.title || '未命名')}</span></a>`);
   };
 
   /* ---------- inline markdown ---------- */
