@@ -133,9 +133,23 @@ export function OptionMenu({ db, prop, opt, anchor, onClose }: { db: Database; p
 }
 
 /* ---------------- date editor ---------------- */
-export function DateEditor({ value, prop, anchor, onChange, onClose }: {
-  value?: string; prop?: Property; anchor: Anchor; onChange: (v: string | null) => void; onClose: () => void;
+const DEFAULT_QUICK = ['09:00', '12:00', '14:00', '18:00', '20:00'];
+
+export function DateEditor({ value, prop, dbId, anchor, onChange, onClose }: {
+  value?: string; prop?: Property; dbId?: string; anchor: Anchor; onChange: (v: string | null) => void; onClose: () => void;
 }) {
+  const [editQuick, setEditQuick] = useState(false);
+  const [qs, setQs] = useState('09:00');
+  const [qe, setQe] = useState('');
+  const quick = prop?.quickTimes ?? DEFAULT_QUICK;
+  const saveQuick = (list: string[] | undefined) => {
+    if (!dbId || !prop) return;
+    updateDb(dbId, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.quickTimes = list; });
+  };
+  const quickLabel = (q: string) => {
+    const [a, b] = q.split('-');
+    return b ? `${formatTime(a, prop?.timeFormat)}–${formatTime(b, prop?.timeFormat)}` : formatTime(a, prop?.timeFormat);
+  };
   const parsed = parseDateValue(value);
   const [val, setVal] = useState<DateVal | null>(parsed);
   const [withEnd, setWithEnd] = useState(!!parsed?.end);
@@ -251,12 +265,44 @@ export function DateEditor({ value, prop, anchor, onChange, onClose }: {
           <div className="menu-row" onClick={() => toggleTime(!withTime)}><span>包含時間</span><Toggle on={withTime} /></div>
           {withTime && (
             <div className="quick-times">
-              {['09:00', '12:00', '14:00', '18:00', '20:00'].map((t) => (
-                <button key={t} className="btn-chip" onClick={() => {
-                  if (!val) { commit({ start: `${today}T${t}` }); return; }
-                  setTimeOf(withEnd && editing === 'end' ? 'end' : 'start', t);
-                }}>{formatTime(t, prop?.timeFormat)}</button>
+              {quick.map((q) => (
+                <button key={q} className={'btn-chip' + (editQuick ? ' editing' : '')} onClick={() => {
+                  if (editQuick) { saveQuick(quick.filter((x) => x !== q)); return; }
+                  const [a, b] = q.split('-');
+                  const day = val ? datePart(val.start) : today;
+                  if (b) {
+                    // a slot sets both start and end on the same day
+                    commit({ start: `${day}T${a}`, end: `${day}T${b}` });
+                    setWithEnd(true);
+                    setEditing('start');
+                    return;
+                  }
+                  if (!val) { commit({ start: `${day}T${a}` }); return; }
+                  setTimeOf(withEnd && editing === 'end' ? 'end' : 'start', a);
+                }}>{quickLabel(q)}{editQuick && <span className="chip-x">×</span>}</button>
               ))}
+              {dbId && !editQuick && <button className="btn-ghost sm muted" title="自訂時間快捷" onClick={() => setEditQuick(true)}><Icon.edit size={12} /> 編輯</button>}
+            </div>
+          )}
+          {withTime && editQuick && (
+            <div className="quick-edit">
+              <div className="muted small">點上方的時間可刪除。新增單一時間，或填入結束時間建立時段：</div>
+              <div className="quick-edit-row">
+                <input className="input sm time" type="time" step={300} value={qs} onChange={(e) => setQs(e.target.value)} aria-label="開始時間" />
+                <span className="muted">–</span>
+                <input className="input sm time" type="time" step={300} value={qe} onChange={(e) => setQe(e.target.value)} aria-label="結束時間（選填）" />
+                <button className="btn-primary sm" disabled={!qs} onClick={() => {
+                  const item = qe && qe > qs ? `${qs}-${qe}` : qs;
+                  if (!quick.includes(item)) saveQuick([...quick, item].sort());
+                  setQe('');
+                }}>新增</button>
+              </div>
+              {qe && qe <= qs && <div className="small danger-text">結束時間需晚於開始時間，將只新增開始時間。</div>}
+              <div className="quick-edit-row">
+                <button className="btn-ghost sm muted" onClick={() => saveQuick(undefined)}>恢復預設</button>
+                <span className="spacer" />
+                <button className="btn-outline sm" onClick={() => setEditQuick(false)}>完成</button>
+              </div>
             </div>
           )}
         </div>
@@ -338,7 +384,7 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
           <div className="cell-text clickable" onClick={(e) => setPop(e.currentTarget as HTMLElement)}>
             {v ? formatDateValue(v, prop) : mode === 'page' ? <span className="placeholder">空白</span> : ' '}
           </div>
-          {pop && <DateEditor value={v} prop={prop} anchor={pop} onChange={(d) => setRowProp(row.id, prop.id, d)} onClose={() => setPop(null)} />}
+          {pop && <DateEditor value={v} prop={prop} dbId={db.id} anchor={pop} onChange={(d) => setRowProp(row.id, prop.id, d)} onClose={() => setPop(null)} />}
         </>
       );
     case 'created_time': case 'last_edited_time':
