@@ -101,7 +101,11 @@ export function MenuSep() { return <div className="menu-sep" />; }
 export function MenuHeader({ children }: { children: React.ReactNode }) { return <div className="menu-header">{children}</div>; }
 
 export function Toggle({ on, onChange }: { on: boolean; onChange?: (v: boolean) => void }) {
-  return <span className={'toggle-switch' + (on ? ' on' : '')} onClick={(e) => { e.stopPropagation(); onChange?.(!on); }}><span /></span>;
+  // without onChange the switch is only a visual: let the click reach the surrounding row
+  return (
+    <span className={'toggle-switch' + (on ? ' on' : '')} role="switch" aria-checked={on}
+      onClick={onChange ? (e) => { e.stopPropagation(); onChange(!on); } : undefined}><span /></span>
+  );
 }
 
 export function Modal({ onClose, children, className, width }: { onClose: () => void; children: React.ReactNode; className?: string; width?: number | string }) {
