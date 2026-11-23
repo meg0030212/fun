@@ -76,5 +76,6 @@ export const Icon = {
   sidebar: mk(<><rect x="3" y="4" width="14" height="12" rx="1.5" /><path d="M8 4v12" /></>),
   duplicate: mk(<><rect x="7" y="7" width="10" height="10" rx="1.5" /><path d="M4 13V4.5A1.5 1.5 0 0 1 5.5 3H13" /></>),
   database: mk(<><ellipse cx="10" cy="5" rx="6" ry="2.5" /><path d="M4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5" /></>),
+  cloud: mk(<path d="M6 15.5h8.5a3.5 3.5 0 0 0 .4-7A5 5 0 0 0 5.3 8 3.75 3.75 0 0 0 6 15.5z" />),
   inbox: mk(<><path d="M3 11l2-7h10l2 7v5H3z" /><path d="M3 11h4l1 2h4l1-2h4" /></>),
 };

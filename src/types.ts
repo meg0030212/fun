@@ -111,6 +111,7 @@ export interface Database {
   activeView: string;
   hostPageId: string;
   inline: boolean;
+  updatedAt?: number;
 }
 
 export interface Settings {
@@ -126,4 +127,8 @@ export interface State {
   dbs: Record<string, Database>;
   settings: Settings;
   recent: string[];
+  /** ids of permanently deleted pages/databases → deletion time (used by sync) */
+  deleted?: Record<string, number>;
+  /** true while the workspace still holds only the untouched example content */
+  pristine?: boolean;
 }

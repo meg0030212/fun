@@ -5,6 +5,7 @@ export interface UIState {
   peek: string | null;
   search: boolean;
   settings: boolean;
+  settingsTab?: string;
   trash: boolean;
   templates: boolean;
   comments: boolean;
@@ -39,8 +40,9 @@ export function hashFor(id: string) {
 }
 
 export function navigate(id: string) {
+  // update the view right away (the hashchange that follows is a no-op) so focus lands without delay
+  setUI({ route: id, peek: null });
   if (window.location.hash !== hashFor(id)) window.location.hash = hashFor(id);
-  else setUI({ route: id, peek: null });
 }
 
 /** in-app confirmation dialog (native confirm() is unavailable in sandboxed frames) */

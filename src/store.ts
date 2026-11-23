@@ -87,7 +87,32 @@ export function update(fn: (d: Draft<State>) => void, kind: 'structural' | 'typi
     if (now - lastTyping > 1200) checkpoint();
     lastTyping = now;
   }
-  state = produce(state, fn);
+  const prev = state;
+  let next = produce(state, fn);
+  // stamp modification times on every changed page / database so sync can merge per item
+  if (next.pages !== prev.pages || next.dbs !== prev.dbs) {
+    const now = Date.now();
+    next = produce(next, (d) => {
+      for (const id in d.pages) {
+        const p = d.pages[id];
+        const old = prev.pages[id];
+        if (old && next.pages[id] !== old && p.updatedAt === old.updatedAt) p.updatedAt = now;
+      }
+      for (const id in d.dbs) {
+        if (next.dbs[id] !== prev.dbs[id]) d.dbs[id].updatedAt = now;
+      }
+      if (d.pristine) d.pristine = false;
+    });
+  }
+  state = next;
+  emit();
+  scheduleSave();
+}
+
+/** replace pages/dbs with a merged copy from sync without touching timestamps */
+export function applyRemoteState(s: State) {
+  checkpoint();
+  state = s;
   emit();
   scheduleSave();
 }
@@ -234,8 +259,10 @@ export function deletePageForever(id: string) {
   const dbIds = new Set<string>();
   collectDescendants(state, id, ids, dbIds);
   update((d) => {
-    ids.forEach((i) => delete d.pages[i]);
-    dbIds.forEach((i) => delete d.dbs[i]);
+    const now = Date.now();
+    d.deleted = d.deleted || {};
+    ids.forEach((i) => { delete d.pages[i]; d.deleted![i] = now; });
+    dbIds.forEach((i) => { delete d.dbs[i]; d.deleted![i] = now; });
     Object.values(d.pages).forEach((p) => {
       if (p.blocks.some((b) => (b.pageId && ids.has(b.pageId)) || (b.dbId && dbIds.has(b.dbId)))) {
         p.blocks = p.blocks.filter((b) => !((b.pageId && ids.has(b.pageId)) || (b.dbId && dbIds.has(b.dbId))));

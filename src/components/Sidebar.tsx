@@ -10,6 +10,7 @@ import { PageIcon } from './EmojiPicker';
 import { MenuItem, MenuSep, Popover, MenuHeader, Anchor } from './Popover';
 import { timeAgo, pickFile, readFileAsText } from '../utils';
 import { markdownToBlocks } from '../markdown';
+import { SyncIndicator } from './SyncPanel';
 
 const EXP_KEY = 'lumen-sidebar-expanded';
 function loadExpanded(): Record<string, boolean> {
@@ -119,6 +120,7 @@ export function Sidebar() {
           <SbItem icon={<Icon.template />} label="範本" onClick={() => setUI({ templates: true })} />
           <SbItem icon={<Icon.import />} label="匯入" onClick={() => importMarkdown(null)} />
           <SbItem icon={<Icon.trash />} label="垃圾桶" onClick={(e) => setTrashPop(e.currentTarget as HTMLElement)} />
+          <SyncIndicator />
         </div>
       </div>
       <div className="sb-resizer" onMouseDown={startResize} onDoubleClick={() => updateSettings({ sidebarWidth: 240 })} />

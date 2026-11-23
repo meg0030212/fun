@@ -35,8 +35,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
     if (!page || page.title || page.locked) return;
     if (Date.now() - page.createdAt > 4000) return;
     if (page.blocks.some((b) => b.html || b.type !== 'text')) return;
-    const t = setTimeout(() => titleRef.current && setCaret(titleRef.current, 'end'), 30);
-    return () => clearTimeout(t);
+    if (titleRef.current) setCaret(titleRef.current, 'end');
   }, [pageId]); // eslint-disable-line
 
   const backlinks = useMemo(() => {

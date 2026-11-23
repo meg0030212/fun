@@ -583,6 +583,21 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .confirm-body { display: flex; flex-direction: column; gap: 8px; padding: 20px; text-align: center; }
 .confirm-msg { font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
 
+.sync-status { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 8px; background: var(--bg-hover); flex-wrap: wrap; }
+.sync-status.st-synced > .icon { color: var(--c-green); }
+.sync-status.st-error > .icon, .sync-status.st-needs-auth > .icon { color: var(--red); }
+.sync-error { margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: var(--b-red); color: var(--c-red); font-size: 13px; }
+.sync-option { margin-top: 20px; padding: 16px; border: 1px solid var(--border-strong); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.sync-option-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.sync-badge { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--blue); background: var(--blue-soft); padding: 2px 6px; border-radius: 4px; }
+.sync-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sync-row .input { flex: 1; min-width: 200px; height: 32px; }
+.sync-help { margin: 0; padding-left: 22px; font-size: 13px; line-height: 1.7; color: var(--text-2); }
+.sync-help a { color: var(--blue); }
+.sync-help code { font-family: var(--font-mono); background: var(--bg-inline-code); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+.copyable { cursor: pointer; }
+.sync-indicator { font-size: 13px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }

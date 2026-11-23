@@ -10,6 +10,7 @@ import { PageView } from './PageView';
 import { ancestors } from './Topbar';
 import { TEMPLATES } from '../templates';
 import { seedState } from '../seed';
+import { SyncSettings } from './SyncPanel';
 
 /* ============================== SEARCH ============================== */
 export function SearchModal() {
@@ -103,8 +104,9 @@ export function SearchModal() {
 export function SettingsModal() {
   const settings = useStore((s) => s.settings);
   const pages = useStore((s) => s.pages);
-  const [tab, setTab] = useState<'account' | 'workspace' | 'appearance' | 'data' | 'shortcuts'>('account');
-  const close = () => setUI({ settings: false });
+  const initialTab = useUI((u) => u.settingsTab);
+  const [tab, setTab] = useState<'account' | 'workspace' | 'appearance' | 'sync' | 'data' | 'shortcuts'>((initialTab as any) || 'account');
+  const close = () => setUI({ settings: false, settingsTab: undefined });
   const size = useMemo(() => { try { return new Blob([JSON.stringify(getState())]).size; } catch { return 0; } }, [pages]);
 
   const exportAll = () => downloadFile(`lumen-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(getState(), null, 2), 'application/json');
@@ -122,7 +124,7 @@ export function SettingsModal() {
   };
 
   const tabs = [
-    ['account', '我的帳號', <Icon.smile key="a" />], ['workspace', '工作區', <Icon.settings key="b" />], ['appearance', '外觀', <Icon.sun key="c" />],
+    ['account', '我的帳號', <Icon.smile key="a" />], ['workspace', '工作區', <Icon.settings key="b" />], ['appearance', '外觀', <Icon.sun key="c" />], ['sync', '同步', <Icon.cloud key="s" />],
     ['data', '資料與備份', <Icon.database key="d" />], ['shortcuts', '鍵盤快速鍵', <Icon.text key="e" />],
   ] as const;
 
@@ -167,6 +169,7 @@ export function SettingsModal() {
               </div>
             </>
           )}
+          {tab === 'sync' && <SyncSettings />}
           {tab === 'data' && (
             <>
               <h3>資料與備份</h3>
