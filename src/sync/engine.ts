@@ -3,6 +3,7 @@ import { applyRemoteState, getState, subscribe } from '../store';
 import { differs, isPayload, mergeStates, SyncPayload, toPayload } from './merge';
 import { DriveProvider } from './drive';
 import { FileProvider, loadHandle, pickFile, saveHandle } from './fileSync';
+import { decryptJson, decryptWithPassword, deriveKey, EncryptedFile, encryptJson, isEncrypted, KeyInfo, loadSavedKey, newSalt, saveKey } from './crypto';
 
 export interface PullResult { exists: boolean; unchanged?: boolean; version?: string; data?: any }
 
@@ -16,7 +17,7 @@ export interface Provider {
   disconnect(): void;
 }
 
-export type SyncState = 'off' | 'syncing' | 'synced' | 'needs-auth' | 'error' | 'offline';
+export type SyncState = 'off' | 'syncing' | 'synced' | 'needs-auth' | 'locked' | 'error' | 'offline';
 
 export interface SyncStatus {
   kind: 'drive' | 'file' | null;
@@ -25,9 +26,11 @@ export interface SyncStatus {
   error?: string;
   lastSync?: number;
   clientId?: string;
+  /** cloud file is encrypted with a password */
+  encrypted: boolean;
 }
 
-interface Config { kind: 'drive' | 'file' | null; clientId?: string; fileId?: string | null; version?: string | null; lastSync?: number }
+interface Config { kind: 'drive' | 'file' | null; clientId?: string; fileId?: string | null; version?: string | null; lastSync?: number; encrypt?: boolean }
 
 const CFG_KEY = 'lumen-sync-config';
 function loadCfg(): Config {
@@ -39,7 +42,10 @@ function saveCfg() {
 
 let cfg: Config = loadCfg();
 let provider: Provider | null = null;
-let status: SyncStatus = { kind: cfg.kind, label: '', state: 'off', lastSync: cfg.lastSync, clientId: cfg.clientId };
+let status: SyncStatus = { kind: cfg.kind, label: '', state: 'off', lastSync: cfg.lastSync, clientId: cfg.clientId, encrypted: !!cfg.encrypt };
+let cryptoKey: KeyInfo | null = null;
+/** last encrypted file we could not open (kept to verify a password) */
+let lockedFile: EncryptedFile | null = null;
 const ls = new Set<() => void>();
 function setStatus(p: Partial<SyncStatus>) { status = { ...status, ...p }; ls.forEach((l) => l()); }
 export function useSyncStatus() {
@@ -80,6 +86,34 @@ export async function syncNow(): Promise<void> {
   try {
     const r = await provider.pull(cfg.version ?? null);
     let needPush = dirty || !r.exists;
+    if (r.data && isEncrypted(r.data)) {
+      if (!cfg.encrypt) {
+        // another device turned encryption on
+        cfg.encrypt = true;
+        saveCfg();
+        setStatus({ encrypted: true });
+      }
+      if (!cryptoKey || cryptoKey.salt !== r.data.salt) {
+        lockedFile = r.data;
+        cryptoKey = null;
+        setStatus({ state: 'locked', error: undefined });
+        return;
+      }
+      try {
+        r.data = JSON.parse(await decryptJson(r.data, cryptoKey));
+      } catch (e: any) {
+        if (!e?.wrongPassword) throw e;
+        lockedFile = r.data as EncryptedFile;
+        cryptoKey = null;
+        await saveKey(null);
+        setStatus({ state: 'locked', error: '雲端檔案的密碼已變更，請輸入新密碼。' });
+        return;
+      }
+    } else if (r.data && cfg.encrypt) {
+      needPush = true; // cloud copy is still plain text: replace it with the encrypted one
+    } else if (r.data && !cfg.encrypt && r.exists) {
+      // fine: plain text on both sides
+    }
     if (r.data) {
       if (!isPayload(r.data)) throw new Error('雲端檔案不是有效的 Lumen 工作區資料');
       const local = getState();
@@ -94,8 +128,13 @@ export async function syncNow(): Promise<void> {
     }
     if (r.version) cfg.version = r.version;
     if (needPush) {
+      let json = JSON.stringify(toPayload(getState()));
+      if (cfg.encrypt) {
+        if (!cryptoKey) { setStatus({ state: 'locked' }); return; }
+        json = JSON.stringify(await encryptJson(json, cryptoKey));
+      }
       dirty = false;
-      cfg.version = await provider.push(JSON.stringify(toPayload(getState())));
+      cfg.version = await provider.push(json);
     }
     if (provider instanceof DriveProvider) cfg.fileId = provider.fileId;
     cfg.lastSync = Date.now();
@@ -157,18 +196,63 @@ export async function reconnect() {
   }
 }
 
+/* ---------- encryption ---------- */
+
+/** turn on encryption (or change the password): every later upload is encrypted */
+export async function enableEncryption(password: string) {
+  cryptoKey = await deriveKey(password, newSalt());
+  await saveKey(cryptoKey);
+  cfg.encrypt = true;
+  saveCfg();
+  lockedFile = null;
+  setStatus({ encrypted: true });
+  dirty = true;
+  await syncNow();
+}
+
+/** enter the password on a device that has not unlocked the encrypted cloud file yet */
+export async function unlock(password: string) {
+  if (lockedFile) {
+    const { key } = await decryptWithPassword(lockedFile, password); // throws on wrong password
+    cryptoKey = key;
+  } else {
+    // nothing to verify against (e.g. the saved key was cleared): start using this password
+    await enableEncryption(password);
+    return;
+  }
+  await saveKey(cryptoKey);
+  lockedFile = null;
+  setStatus({ state: 'syncing', error: undefined });
+  await syncNow();
+}
+
+export async function disableEncryption() {
+  cfg.encrypt = false;
+  saveCfg();
+  setStatus({ encrypted: false });
+  dirty = true;
+  await syncNow();
+  if (status.state === 'synced') { cryptoKey = null; await saveKey(null); }
+}
+
+export function isLocked() { return status.state === 'locked'; }
+
 export async function disconnect() {
+  cryptoKey = null;
+  lockedFile = null;
+  await saveKey(null);
   provider?.disconnect();
   provider = null;
   cfg = { kind: null, clientId: cfg.clientId };
   saveCfg();
   await saveHandle(null);
-  setStatus({ kind: null, label: '', state: 'off', error: undefined, lastSync: undefined });
+  setStatus({ kind: null, label: '', state: 'off', error: undefined, lastSync: undefined, encrypted: false });
 }
 
 /* ---------- startup ---------- */
 
 export async function initSync() {
+  cryptoKey = await loadSavedKey();
   subscribe(() => {
     if (applying || !provider) return;
     dirty = true;

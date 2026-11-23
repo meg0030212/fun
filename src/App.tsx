@@ -6,6 +6,7 @@ import { Topbar } from './components/Topbar';
 import { PageView } from './components/PageView';
 import { CommentsPanel, ConfirmDialog, Home, PeekModal, SearchModal, SettingsModal, TemplatesModal, Toast } from './components/Panels';
 import { FormatToolbar } from './components/FormatToolbar';
+import { PasswordDialog } from './components/SyncPanel';
 
 function useTheme() {
   const theme = useStore((s) => s.settings.theme);
@@ -99,6 +100,7 @@ export default function App() {
       {templates && <TemplatesModal />}
       <FormatToolbar />
       <ConfirmDialog />
+      <PasswordDialog />
       <Toast />
     </div>
   );

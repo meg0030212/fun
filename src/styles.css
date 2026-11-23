@@ -598,6 +598,13 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .copyable { cursor: pointer; }
 .sync-indicator { font-size: 13px; }
 
+.sync-badge.on { color: var(--c-green); background: var(--b-green); }
+.pw-dialog { display: flex; flex-direction: column; gap: 8px; padding: 20px; }
+.pw-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; }
+.pw-msg { line-height: 1.6; margin-bottom: 4px; }
+.pw-dialog .input { height: 34px; }
+.pw-show { display: inline-flex; align-items: center; gap: 6px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
