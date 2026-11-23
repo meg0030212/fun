@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { State } from '../types';
 import { createPage, getState, isTrashed, patchPage, replaceState, updateSettings, useStore } from '../store';
-import { askConfirm, navigate, openPeek, setUI, toast, useUI } from '../ui';
+import { askConfirm, askPassword, navigate, openPeek, setUI, toast, useUI } from '../ui';
+import { decryptWithPassword, deriveKey, encryptJson, isEncrypted, newSalt } from '../sync/crypto';
 import { downloadFile, formatDateTime, htmlToText, pickFile, readFileAsText, timeAgo, toISODate, uid } from '../utils';
 import { Icon } from './Icons';
 import { Modal } from './Popover';
@@ -110,11 +111,33 @@ export function SettingsModal() {
   const size = useMemo(() => { try { return new Blob([JSON.stringify(getState())]).size; } catch { return 0; } }, [pages]);
 
   const exportAll = () => downloadFile(`lumen-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(getState(), null, 2), 'application/json');
+  const exportEncrypted = async () => {
+    const pw = await askPassword({
+      title: '匯出加密備份', message: '備份檔會用這個密碼加密。還原時需要輸入同一個密碼，忘記就無法開啟。',
+      action: '加密並下載', confirm: true,
+    });
+    if (!pw) return;
+    const key = await deriveKey(pw, newSalt());
+    const file = await encryptJson(JSON.stringify(getState()), key);
+    downloadFile(`lumen-backup-encrypted-${toISODate(new Date())}.json`, JSON.stringify(file), 'application/json');
+    toast('已匯出加密備份');
+  };
   const importAll = async () => {
     const f = await pickFile('.json,application/json');
     if (!f) return;
     try {
-      const s = JSON.parse(await readFileAsText(f)) as State;
+      let raw = JSON.parse(await readFileAsText(f));
+      if (isEncrypted(raw)) {
+        const enc = raw;
+        let text: string | null = null;
+        const pw = await askPassword({
+          title: '開啟加密備份', message: '這個備份檔已加密，請輸入匯出時設定的密碼。', action: '解密',
+          check: async (p) => { try { text = (await decryptWithPassword(enc, p)).text; return null; } catch { return '密碼不正確，請再試一次。'; } },
+        });
+        if (!pw || !text) return;
+        raw = JSON.parse(text);
+      }
+      const s = raw as State;
       if (!s.pages || !s.dbs || !s.settings) throw new Error('bad');
       if (!(await askConfirm('匯入將取代目前所有資料，確定嗎？', '匯入並取代'))) return;
       replaceState(s);
@@ -176,10 +199,13 @@ export function SettingsModal() {
               <p className="muted small">所有資料都儲存在此瀏覽器的本機儲存空間中（目前約 {(size / 1024).toFixed(1)} KB）。建議定期匯出備份。</p>
               <div className="set-line">
                 <div><div>匯出整個工作區</div><div className="muted small">下載包含所有頁面與資料庫的 JSON 檔案。</div></div>
-                <button className="btn-outline sm" onClick={exportAll}>匯出</button>
+                <span className="sync-row" style={{ flexWrap: 'nowrap' }}>
+                  <button className="btn-outline sm" onClick={exportAll}>匯出</button>
+                  <button className="btn-outline sm" onClick={() => void exportEncrypted()}>匯出（加密）</button>
+                </span>
               </div>
               <div className="set-line">
-                <div><div>從備份還原</div><div className="muted small">匯入先前匯出的 JSON 檔案（將取代目前資料）。</div></div>
+                <div><div>從備份還原</div><div className="muted small">匯入先前匯出的 JSON 檔案，加密備份會要求輸入密碼（將取代目前資料）。</div></div>
                 <button className="btn-outline sm" onClick={importAll}>匯入</button>
               </div>
               <div className="set-line">

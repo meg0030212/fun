@@ -11,9 +11,21 @@ export interface UIState {
   comments: boolean;
   toast: string | null;
   confirm: { message: string; action: string; resolve: (ok: boolean) => void } | null;
+  password: PasswordRequest | null;
 }
 
-let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, comments: false, toast: null, confirm: null };
+export interface PasswordRequest {
+  title: string;
+  message: string;
+  action: string;
+  /** ask twice (setting a new password) */
+  confirm?: boolean;
+  /** async check; return an error message to keep the dialog open */
+  check?: (pw: string) => Promise<string | null>;
+  resolve: (pw: string | null) => void;
+}
+
+let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, comments: false, toast: null, confirm: null, password: null };
 const ls = new Set<() => void>();
 
 function parseHash(): string {
@@ -43,6 +55,11 @@ export function navigate(id: string) {
   // update the view right away (the hashchange that follows is a no-op) so focus lands without delay
   setUI({ route: id, peek: null });
   if (window.location.hash !== hashFor(id)) window.location.hash = hashFor(id);
+}
+
+/** in-app password dialog; resolves null when cancelled */
+export function askPassword(opts: Omit<PasswordRequest, 'resolve'>): Promise<string | null> {
+  return new Promise((resolve) => setUI({ password: { ...opts, resolve } }));
 }
 
 /** in-app confirmation dialog (native confirm() is unavailable in sandboxed frames) */

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { connectDrive, connectFile, disconnect, reconnect, syncNow, useSyncStatus } from '../sync/engine';
+import { connectDrive, connectFile, disableEncryption, disconnect, enableEncryption, reconnect, syncNow, unlock, useSyncStatus } from '../sync/engine';
 import { fileSyncSupported } from '../sync/fileSync';
-import { setUI, toast } from '../ui';
+import { askConfirm, askPassword, setUI, toast, useUI } from '../ui';
+import { Modal } from './Popover';
 import { formatDateTime, timeAgo } from '../utils';
 import { Icon } from './Icons';
 
@@ -10,22 +11,24 @@ const STATE_TEXT: Record<string, string> = {
   syncing: '同步中…',
   synced: '已同步',
   'needs-auth': '需要重新連線',
+  locked: '需要輸入密碼',
   error: '同步失敗',
   offline: '離線中',
 };
 
 export function SyncIndicator() {
   const s = useSyncStatus();
-  const color = s.state === 'synced' ? 'var(--c-green)' : s.state === 'error' || s.state === 'needs-auth' ? 'var(--red)' : 'var(--text-3)';
+  const color = s.state === 'synced' ? 'var(--c-green)' : s.state === 'error' || s.state === 'needs-auth' || s.state === 'locked' ? 'var(--red)' : 'var(--text-3)';
   const text = s.state === 'synced' && s.lastSync ? `已同步 · ${timeAgo(s.lastSync)}` : STATE_TEXT[s.state];
   return (
     <div className="sb-item muted sync-indicator" title={s.label ? `同步到：${s.label}` : '設定同步'}
       onClick={() => {
         if (s.state === 'needs-auth') void reconnect();
+        else if (s.state === 'locked') void promptUnlock();
         else setUI({ settings: true, settingsTab: 'sync' });
       }}>
-      <span className="sb-icon" style={{ color }}><Icon.cloud size={16} /></span>
-      <span className="sb-label">{s.state === 'needs-auth' ? '點擊重新連線同步' : text}</span>
+      <span className="sb-icon" style={{ color }}>{s.encrypted ? <Icon.lock size={15} /> : <Icon.cloud size={16} />}</span>
+      <span className="sb-label">{s.state === 'needs-auth' ? '點擊重新連線同步' : s.state === 'locked' ? '點擊輸入同步密碼' : text}</span>
     </div>
   );
 }
@@ -50,14 +53,15 @@ export function SyncSettings() {
       <div className={'sync-status st-' + s.state}>
         <Icon.cloud size={18} />
         <div className="grow">
-          <div className="strong">{STATE_TEXT[s.state]}{s.label ? ` · ${s.label}` : ''}</div>
+          <div className="strong">{STATE_TEXT[s.state]}{s.label ? ` · ${s.label}` : ''}{s.encrypted ? ' · 已加密' : ''}</div>
           <div className="muted small">
             {s.lastSync ? `上次同步：${formatDateTime(s.lastSync)}` : '開啟同步後，你在任何裝置上的變更都會自動合併到同一份雲端檔案。'}
           </div>
           {s.error && <div className="small danger-text" style={{ marginTop: 4 }}>{s.error}</div>}
         </div>
         {s.kind && s.state === 'needs-auth' && <button className="btn-primary sm" disabled={busy} onClick={() => run(reconnect)}>重新連線</button>}
-        {s.kind && s.state !== 'needs-auth' && <button className="btn-outline sm" disabled={busy || s.state === 'syncing'} onClick={() => run(syncNow)}>立即同步</button>}
+        {s.kind && s.state === 'locked' && <button className="btn-primary sm" onClick={() => void promptUnlock()}>輸入密碼</button>}
+        {s.kind && s.state !== 'needs-auth' && s.state !== 'locked' && <button className="btn-outline sm" disabled={busy || s.state === 'syncing'} onClick={() => run(syncNow)}>立即同步</button>}
         {s.kind && <button className="btn-ghost sm danger" onClick={() => run(disconnect)}>停止同步</button>}
       </div>
       {err && <div className="sync-error">{err}</div>}
@@ -108,9 +112,111 @@ export function SyncSettings() {
         )}
       </div>
 
+      <EncryptionSettings />
+
       <div className="muted small" style={{ marginTop: 16, lineHeight: 1.6 }}>
         同步方式：每個頁面與資料庫各自保留最後修改的版本，所以兩台裝置編輯不同頁面時都會保留；若同時編輯同一頁面，以較晚儲存的為準。永久刪除的頁面也會在其他裝置上刪除。
       </div>
     </>
+  );
+}
+
+/* ---------------- password dialog ---------------- */
+export function PasswordDialog() {
+  const req = useUI((u) => u.password);
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [show, setShow] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!req) return null;
+  const close = (v: string | null) => {
+    setUI({ password: null });
+    setPw(''); setPw2(''); setErr(''); setShow(false);
+    req.resolve(v);
+  };
+  const submit = async () => {
+    setErr('');
+    if (req.confirm) {
+      if (pw.length < 8) { setErr('密碼至少需要 8 個字元。'); return; }
+      if (pw !== pw2) { setErr('兩次輸入的密碼不一致。'); return; }
+    } else if (!pw) return;
+    if (req.check) {
+      setBusy(true);
+      const e = await req.check(pw);
+      setBusy(false);
+      if (e) { setErr(e); return; }
+    }
+    close(pw);
+  };
+  return (
+    <Modal onClose={() => !busy && close(null)} width={380} className="confirm-modal">
+      <form className="pw-dialog" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="pw-title"><Icon.lock size={16} /> {req.title}</div>
+        <div className="muted small pw-msg">{req.message}</div>
+        <input id="pw-1" className="input" type={show ? 'text' : 'password'} autoFocus autoComplete={req.confirm ? 'new-password' : 'current-password'}
+          placeholder={req.confirm ? '新密碼（至少 8 個字元）' : '密碼'} value={pw} onChange={(e) => setPw(e.target.value)} />
+        {req.confirm && (
+          <input id="pw-2" className="input" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="再輸入一次" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+        )}
+        <label className="muted small pw-show"><input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> 顯示密碼</label>
+        {err && <div className="sync-error">{err}</div>}
+        <button type="submit" className="btn-primary" disabled={busy}>{busy ? '處理中…' : req.action}</button>
+        <button type="button" className="btn-outline" disabled={busy} onClick={() => close(null)}>取消</button>
+      </form>
+    </Modal>
+  );
+}
+
+/** shared flow: ask for the password and unlock the encrypted cloud file */
+export async function promptUnlock() {
+  await askPassword({
+    title: '輸入同步密碼',
+    message: '雲端的工作區已加密。請輸入設定加密時使用的密碼，此裝置會記住它。',
+    action: '解鎖並同步',
+    check: async (pw) => {
+      try { await unlock(pw); return null; } catch (e: any) { return e?.wrongPassword ? '密碼不正確，請再試一次。' : (e?.message || String(e)); }
+    },
+  });
+}
+
+export function EncryptionSettings() {
+  const s = useSyncStatus();
+  const setOrChange = async (change: boolean) => {
+    await askPassword({
+      title: change ? '變更加密密碼' : '開啟加密',
+      message: change
+        ? '雲端檔案會改用新密碼重新加密。其他裝置下次同步時需要輸入新密碼。'
+        : '上傳前會用這個密碼加密整個工作區。請務必記住它：忘記密碼就無法讀取雲端資料（本機資料不受影響）。',
+      action: change ? '變更密碼' : '開啟加密',
+      confirm: true,
+      check: async (pw) => {
+        try { await enableEncryption(pw); toast(change ? '已變更加密密碼' : '已開啟加密'); return null; } catch (e: any) { return e?.message || String(e); }
+      },
+    });
+  };
+  return (
+    <div className="sync-option">
+      <div className="sync-option-head">
+        <span className={'sync-badge' + (s.encrypted ? ' on' : '')}>{s.encrypted ? '已開啟' : '未開啟'}</span>
+        <div className="strong"><Icon.lock size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> 端對端加密</div>
+        <div className="muted small">開啟後，上傳到雲端的檔案會先用你的密碼加密（AES-256-GCM）。Google 或任何拿到檔案的人都無法讀取內容。密碼不會上傳，只有你的裝置知道。</div>
+      </div>
+      {!s.kind ? (
+        <div className="muted small">請先在上方選擇同步方式。</div>
+      ) : s.state === 'locked' ? (
+        <div className="sync-row"><button className="btn-primary" onClick={() => void promptUnlock()}>輸入密碼以解鎖</button></div>
+      ) : s.encrypted ? (
+        <div className="sync-row">
+          <button className="btn-outline" onClick={() => void setOrChange(true)}>變更密碼</button>
+          <button className="btn-ghost sm danger" onClick={async () => {
+            if (await askConfirm('關閉加密後，雲端檔案會改以未加密的形式儲存。確定嗎？', '關閉加密')) { await disableEncryption(); toast('已關閉加密'); }
+          }}>關閉加密</button>
+        </div>
+      ) : (
+        <div className="sync-row"><button className="btn-primary" onClick={() => void setOrChange(false)}>開啟加密…</button></div>
+      )}
+      <div className="muted small">注意：加密只保護雲端檔案。此瀏覽器中的資料仍未加密，請保護好你的裝置。</div>
+    </div>
   );
 }
