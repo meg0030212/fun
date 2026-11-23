@@ -605,6 +605,11 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .pw-dialog .input { height: 34px; }
 .pw-show { display: inline-flex; align-items: center; gap: 6px; }
 
+.import { padding: 16px 20px 20px; overflow-y: auto; }
+.import-head { display: flex; align-items: center; justify-content: space-between; }
+.import .sync-option { margin-top: 14px; }
+.import-report { padding: 10px 12px; border-radius: 6px; background: var(--b-green); display: flex; flex-direction: column; gap: 2px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }

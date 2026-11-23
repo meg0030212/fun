@@ -7,6 +7,7 @@ import { PageView } from './components/PageView';
 import { CommentsPanel, ConfirmDialog, Home, PeekModal, SearchModal, SettingsModal, TemplatesModal, Toast } from './components/Panels';
 import { FormatToolbar } from './components/FormatToolbar';
 import { PasswordDialog } from './components/SyncPanel';
+import { ImportModal } from './components/ImportModal';
 
 function useTheme() {
   const theme = useStore((s) => s.settings.theme);
@@ -29,6 +30,7 @@ export default function App() {
   const search = useUI((u) => u.search);
   const settings = useUI((u) => u.settings);
   const templates = useUI((u) => u.templates);
+  const importer = useUI((u) => u.importer);
   const comments = useUI((u) => u.comments);
   const sidebarOpen = useStore((s) => s.settings.sidebarOpen);
   const page = useStore((s) => s.pages[route]);
@@ -98,6 +100,7 @@ export default function App() {
       {search && <SearchModal />}
       {settings && <SettingsModal />}
       {templates && <TemplatesModal />}
+      {importer && <ImportModal />}
       <FormatToolbar />
       <ConfirmDialog />
       <PasswordDialog />

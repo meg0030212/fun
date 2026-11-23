@@ -42,11 +42,21 @@ function mk(type: Block['type'], html = '', extra: Partial<Block> = {}): Block {
 export function markdownToBlocks(md: string): Block[] {
   const lines = md.replace(/\r\n?/g, '\n').split('\n');
   const out: Block[] = [];
+  // indentation width: Notion exports use 4 spaces per level, many editors use 2
+  let unit = 0;
+  let inFence = false;
+  for (const l of lines) {
+    if (/^\s*```/.test(l)) inFence = !inFence;
+    if (inFence) continue;
+    const sp = /^( +)\S/.exec(l.replace(/\t/g, '    '));
+    if (sp && /^\s*([-*+]|\d+[.)])\s/.test(l)) unit = unit ? Math.min(unit, sp[1].length) : sp[1].length;
+  }
+  if (!unit || unit > 4) unit = 2;
   let i = 0;
   while (i < lines.length) {
     const raw = lines[i];
     const m = /^(\s*)(.*)$/.exec(raw)!;
-    const indent = Math.min(8, Math.floor(m[1].replace(/\t/g, '    ').length / 2));
+    const indent = Math.min(8, Math.floor(m[1].replace(/\t/g, '    ').length / unit));
     const line = m[2];
     let r: RegExpExecArray | null;
     if (line.startsWith('```')) {
@@ -80,7 +90,7 @@ export function markdownToBlocks(md: string): Block[] {
     }
     if (!line.trim()) { i++; continue; }
     if ((r = /^(#{1,3})\s+(.*)$/.exec(line))) out.push(mk(('h' + r[1].length) as Block['type'], inlineMdToHtml(r[2])));
-    else if ((r = /^[-*+]\s+\[( |x|X)\]\s?(.*)$/.exec(line))) out.push(mk('todo', inlineMdToHtml(r[2]), { checked: r[1] !== ' ', indent }));
+    else if ((r = /^[-*+]\s+\[( |x|X)\]\s*(.*)$/.exec(line))) out.push(mk('todo', inlineMdToHtml(r[2]), { checked: r[1] !== ' ', indent }));
     else if ((r = /^[-*+]\s+(.*)$/.exec(line))) out.push(mk('bulleted', inlineMdToHtml(r[1]), { indent }));
     else if ((r = /^\d+[.)]\s+(.*)$/.exec(line))) out.push(mk('numbered', inlineMdToHtml(r[1]), { indent }));
     else if ((r = /^>\s?(.*)$/.exec(line))) out.push(mk('quote', inlineMdToHtml(r[1])));
