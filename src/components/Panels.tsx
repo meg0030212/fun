@@ -348,7 +348,7 @@ export function Home() {
       Object.values(pages).forEach((p) => {
         if (p.rowOf !== db.id || isTrashed(p.id)) return;
         const d = p.props?.[dp.id];
-        if (d && d >= today) out.push({ page: p, date: d });
+        if (typeof d === 'string' && (d.split('/')[1] || d) >= today) out.push({ page: p, date: d.split('/')[0] });
       });
     });
     return out.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6);
@@ -380,7 +380,7 @@ export function Home() {
             {upcoming.length === 0 && <div className="muted small" style={{ padding: 12 }}>沒有即將到來的項目。在資料庫中為項目設定日期即可顯示於此。</div>}
             {upcoming.map((u) => (
               <div key={u.page.id} className="home-row" onClick={() => openPeek(u.page.id)}>
-                <span className="home-date">{u.date.slice(5).replace('-', '/')}</span>
+                <span className="home-date">{u.date.slice(5, 10).replace('-', '/')}{u.date.includes('T') ? <span className="muted"> {u.date.slice(11, 16)}</span> : null}</span>
                 <PageIcon icon={u.page.icon} size={15} /><span className="grow ellipsis">{u.page.title || '未命名'}</span>
               </div>
             ))}

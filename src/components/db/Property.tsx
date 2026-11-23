@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import type { Database, Page, Property, PropType, SelectOption, View } from '../../types';
 import { setRowProp, patchPage, updateDb, updateView, makeProp } from '../../store';
-import { COLORS, COLOR_NAMES, formatDate, formatDateTime, safeUrl, toISODate, uid, parseISODate } from '../../utils';
-import { Popover, MenuItem, MenuSep, MenuHeader, Anchor } from '../Popover';
+import { COLORS, COLOR_NAMES, formatDateTime, safeUrl, uid } from '../../utils';
+import { DateVal, datePart, formatDateValue, formatTime, hasTime, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
+import { Popover, MenuItem, MenuSep, MenuHeader, Anchor, Toggle } from '../Popover';
 import { askConfirm } from '../../ui';
 import { Icon } from '../Icons';
 import { formatNumber, getValue, PROP_TYPES, propTypeLabel } from './dbutils';
@@ -132,38 +133,137 @@ export function OptionMenu({ db, prop, opt, anchor, onClose }: { db: Database; p
 }
 
 /* ---------------- date editor ---------------- */
-export function DateEditor({ value, anchor, onChange, onClose }: { value?: string; anchor: Anchor; onChange: (v: string | null) => void; onClose: () => void }) {
-  const init = value ? parseISODate(value) || new Date() : new Date();
+export function DateEditor({ value, prop, anchor, onChange, onClose }: {
+  value?: string; prop?: Property; anchor: Anchor; onChange: (v: string | null) => void; onClose: () => void;
+}) {
+  const parsed = parseDateValue(value);
+  const [val, setVal] = useState<DateVal | null>(parsed);
+  const [withEnd, setWithEnd] = useState(!!parsed?.end);
+  const [withTime, setWithTime] = useState(hasTime(parsed?.start));
+  const [editing, setEditing] = useState<'start' | 'end'>('start');
+  const init = parsed ? toDate(parsed.start) : new Date();
   const [month, setMonth] = useState(new Date(init.getFullYear(), init.getMonth(), 1));
+  const now = new Date();
+  const defaultTime = `${String(Math.min(23, now.getHours() + 1)).padStart(2, '0')}:00`;
+
+  const commit = (next: DateVal | null) => {
+    setVal(next);
+    onChange(serializeDate(next));
+  };
+  const point = (day: string, time: string) => (withTime ? `${day}T${time || defaultTime}` : day);
+
+  const pickDay = (day: string) => {
+    if (!val) { commit({ start: point(day, ''), end: withEnd ? point(day, '') : undefined }); setEditing(withEnd ? 'end' : 'start'); return; }
+    if (withEnd && editing === 'end') {
+      let start = val.start, end = point(day, timePart(val.end || val.start));
+      if (toDate(end) < toDate(start)) [start, end] = [end, point(datePart(val.start), timePart(val.start))];
+      commit({ start, end });
+      setEditing('start');
+    } else {
+      const start = point(day, timePart(val.start));
+      let end = val.end;
+      if (withEnd && end && toDate(end) < toDate(start)) end = point(day, timePart(end));
+      commit({ start, end: withEnd ? end || start : undefined });
+      if (withEnd) setEditing('end');
+    }
+  };
+
+  const setTimeOf = (which: 'start' | 'end', t: string) => {
+    if (!val || !t) return;
+    const base = which === 'start' ? val.start : (val.end || val.start);
+    const next = { ...val, [which]: `${datePart(base)}T${t}` } as DateVal;
+    if (next.end && toDate(next.end) < toDate(next.start)) next.end = next.start;
+    commit(next);
+  };
+
+  const toggleTime = (on: boolean) => {
+    setWithTime(on);
+    if (!val) return;
+    const conv = (s: string) => (on ? (hasTime(s) ? s : `${datePart(s)}T${defaultTime}`) : datePart(s));
+    let end = val.end ? conv(val.end) : undefined;
+    if (on && end && datePart(end) === datePart(val.start) && timePart(end) <= timePart(conv(val.start))) {
+      const e = toDate(conv(val.start)); e.setHours(e.getHours() + 1); end = toLocalIso(e, true);
+    }
+    commit({ start: conv(val.start), end });
+  };
+
+  const toggleEnd = (on: boolean) => {
+    setWithEnd(on);
+    if (!val) return;
+    if (on) {
+      let end = val.start;
+      if (hasTime(val.start)) { const e = toDate(val.start); e.setHours(e.getHours() + 1); end = toLocalIso(e, true); }
+      commit({ start: val.start, end });
+      setEditing('end');
+    } else { commit({ start: val.start }); setEditing('start'); }
+  };
+
   const first = new Date(month);
-  const start = new Date(first);
-  start.setDate(1 - first.getDay());
-  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
-  const today = toISODate(new Date());
+  const startCell = new Date(first);
+  startCell.setDate(1 - first.getDay());
+  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(startCell); d.setDate(startCell.getDate() + i); return toLocalIso(d, false); });
+  const today = toLocalIso(new Date(), false);
+  const s0 = val ? datePart(val.start) : '';
+  const e0 = val?.end ? datePart(val.end) : s0;
+
+  const field = (which: 'start' | 'end') => {
+    const v = which === 'start' ? val?.start : val?.end;
+    return (
+      <div className={'date-field' + (editing === which && withEnd ? ' active' : '')} onClick={() => setEditing(which)}>
+        <input className="input sm" type="date" value={v ? datePart(v) : ''}
+          onChange={(e) => { if (!e.target.value) return; setEditing(which); if (which === 'start') pickDay(e.target.value); else { const t = val?.end ? timePart(val.end) : ''; commit({ start: val?.start || point(e.target.value, ''), end: point(e.target.value, t) }); } }} />
+        {withTime && (
+          <input className="input sm time" type="time" step={300} value={v ? timePart(v) : ''} onChange={(e) => setTimeOf(which, e.target.value)} />
+        )}
+      </div>
+    );
+  };
+
   return (
-    <Popover anchor={anchor} onClose={onClose} width={260}>
+    <Popover anchor={anchor} onClose={onClose} width={290}>
       <div className="date-editor">
-        <input className="input" type="date" value={value || ''} onChange={(e) => onChange(e.target.value || null)} />
+        <div className="date-fields">
+          {field('start')}
+          {withEnd && <div className="date-arrow">→</div>}
+          {withEnd && field('end')}
+        </div>
         <div className="mini-cal-head">
           <span>{month.getFullYear()}年{month.getMonth() + 1}月</span>
           <span>
+            <button className="btn-ghost sm" onClick={() => setMonth(new Date(now.getFullYear(), now.getMonth(), 1))}>今天</button>
             <button className="btn-icon" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><Icon.chevronLeft size={14} /></button>
             <button className="btn-icon" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><Icon.chevronRight size={14} /></button>
           </span>
         </div>
         <div className="mini-cal">
           {['日', '一', '二', '三', '四', '五', '六'].map((d) => <span key={d} className="mini-dow">{d}</span>)}
-          {days.map((d) => {
-            const iso = toISODate(d);
+          {days.map((iso) => {
+            const inRange = !!val && withEnd && iso > s0 && iso < e0;
+            const edge = !!val && (iso === s0 || (withEnd && iso === e0));
             return (
-              <span key={iso} className={'mini-day' + (d.getMonth() !== month.getMonth() ? ' other' : '') + (iso === value ? ' sel' : '') + (iso === today ? ' today' : '')}
-                onClick={() => { onChange(iso); onClose(); }}>{d.getDate()}</span>
+              <span key={iso} className={'mini-day' + (toDate(iso).getMonth() !== month.getMonth() ? ' other' : '') + (edge ? ' sel' : '') + (inRange ? ' range' : '') + (iso === today ? ' today' : '')}
+                onClick={() => pickDay(iso)}>{toDate(iso).getDate()}</span>
             );
           })}
         </div>
+        <div className="date-toggles">
+          <div className="menu-row" onClick={() => toggleEnd(!withEnd)}><span>結束日期</span><Toggle on={withEnd} /></div>
+          <div className="menu-row" onClick={() => toggleTime(!withTime)}><span>包含時間</span><Toggle on={withTime} /></div>
+          {withTime && (
+            <div className="quick-times">
+              {['09:00', '12:00', '14:00', '18:00', '20:00'].map((t) => (
+                <button key={t} className="btn-chip" onClick={() => {
+                  if (!val) { commit({ start: `${today}T${t}` }); return; }
+                  setTimeOf(withEnd && editing === 'end' ? 'end' : 'start', t);
+                }}>{formatTime(t, prop?.timeFormat)}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="date-preview muted small">{val ? formatDateValue(serializeDate(val), prop) : '尚未選擇日期'}</div>
         <div className="date-actions">
-          <button className="btn-ghost sm" onClick={() => { onChange(today); onClose(); }}>今天</button>
-          <button className="btn-ghost sm" onClick={() => { onChange(null); onClose(); }}>清除</button>
+          <button className="btn-ghost sm" onClick={() => { const t = withTime ? `${today}T${timePart(val?.start || '') || defaultTime}` : today; commit({ start: t }); setWithEnd(false); }}>設為今天</button>
+          <button className="btn-ghost sm" onClick={() => { commit(null); setWithEnd(false); setWithTime(false); onClose(); }}>清除</button>
         </div>
       </div>
     </Popover>
@@ -232,13 +332,13 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
       );
     }
     case 'date':
-      if (ro) return v ? <span className="cell-text">{formatDate(v)}</span> : null;
+      if (ro) return v ? <span className="cell-text">{formatDateValue(v, prop)}</span> : null;
       return (
         <>
           <div className="cell-text clickable" onClick={(e) => setPop(e.currentTarget as HTMLElement)}>
-            {v ? formatDate(v) : mode === 'page' ? <span className="placeholder">空白</span> : ' '}
+            {v ? formatDateValue(v, prop) : mode === 'page' ? <span className="placeholder">空白</span> : ' '}
           </div>
-          {pop && <DateEditor value={v} anchor={pop} onChange={(d) => setRowProp(row.id, prop.id, d)} onClose={() => setPop(null)} />}
+          {pop && <DateEditor value={v} prop={prop} anchor={pop} onChange={(d) => setRowProp(row.id, prop.id, d)} onClose={() => setPop(null)} />}
         </>
       );
     case 'created_time': case 'last_edited_time':
@@ -303,6 +403,23 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
               <option value="dollar">美元</option><option value="twd">新台幣</option>
             </select>
           </div>
+        )}
+        {prop.type === 'date' && (
+          <>
+            <div className="menu-row">
+              <span className="muted small">日期格式</span>
+              <select className="select-sm" value={prop.dateFormat || 'full'} onChange={(e) => updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.dateFormat = e.target.value as any; })}>
+                <option value="full">2026年11月23日</option><option value="short">11月23日（一）</option>
+                <option value="slash">2026/11/23</option><option value="iso">2026-11-23</option><option value="relative">相對（今天、明天）</option>
+              </select>
+            </div>
+            <div className="menu-row">
+              <span className="muted small">時間格式</span>
+              <select className="select-sm" value={prop.timeFormat || '24h'} onChange={(e) => updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.timeFormat = e.target.value as any; })}>
+                <option value="24h">24 小時制（14:30）</option><option value="12h">12 小時制（下午 2:30）</option>
+              </select>
+            </div>
+          </>
         )}
         {isSel && (
           <>
