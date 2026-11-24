@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Database, Page, Property, PropType, SelectOption, View } from '../../types';
 import { setRowProp, patchPage, updateDb, updateView, makeProp } from '../../store';
-import { COLORS, COLOR_NAMES, formatDateTime, safeUrl, uid } from '../../utils';
+import { COLORS, COLOR_NAMES, formatDateTime, monthLabel, safeUrl, uid, yearLabel } from '../../utils';
 import { DateVal, datePart, formatDateValue, formatTime, hasTime, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Popover, MenuItem, MenuSep, MenuHeader, Anchor, Toggle } from '../Popover';
 import { askConfirm, setUI } from '../../ui';
@@ -243,7 +243,7 @@ export function DateEditor({ value, prop, dbId, anchor, onChange, onClose }: {
           {withEnd && field('end')}
         </div>
         <div className="mini-cal-head">
-          <span>{month.getFullYear()}年{month.getMonth() + 1}月</span>
+          <span>{prop?.dateFormat === 'roc' || prop?.dateFormat === 'roc-slash' ? `${yearLabel(month.getFullYear(), true)}${month.getMonth() + 1}月` : monthLabel(month)}</span>
           <span>
             <button className="btn-ghost sm" onClick={() => setMonth(new Date(now.getFullYear(), now.getMonth(), 1))}>今天</button>
             <button className="btn-icon" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><Icon.chevronLeft size={14} /></button>
@@ -474,7 +474,9 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
               <span className="muted small">日期格式</span>
               <select className="select-sm" value={prop.dateFormat || 'full'} onChange={(e) => updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.dateFormat = e.target.value as any; })}>
                 <option value="full">2026年11月23日</option><option value="short">11月23日（一）</option>
-                <option value="slash">2026/11/23</option><option value="iso">2026-11-23</option><option value="relative">相對（今天、明天）</option>
+                <option value="slash">2026/11/23</option><option value="iso">2026-11-23</option>
+                <option value="roc">民國115年11月23日</option><option value="roc-slash">115/11/23（民國）</option>
+                <option value="relative">相對（今天、明天）</option>
               </select>
             </div>
             <div className="menu-row">

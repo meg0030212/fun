@@ -74,7 +74,7 @@ export interface Property {
   type: PropType;
   options?: SelectOption[];
   numberFormat?: 'number' | 'percent' | 'dollar' | 'twd' | 'comma';
-  dateFormat?: 'full' | 'short' | 'slash' | 'iso' | 'relative';
+  dateFormat?: 'full' | 'short' | 'slash' | 'iso' | 'relative' | 'roc' | 'roc-slash';
   timeFormat?: '24h' | '12h';
   /** date picker shortcuts: "HH:mm" or a slot "HH:mm-HH:mm" */
   quickTimes?: string[];
@@ -125,6 +125,8 @@ export interface Database {
 
 export interface Settings {
   theme: 'light' | 'dark' | 'system';
+  /** year display: Gregorian or Republic of China (民國) */
+  era?: 'gregorian' | 'roc';
   workspaceName: string;
   userName: string;
   sidebarWidth: number;

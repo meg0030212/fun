@@ -1,7 +1,7 @@
 import type { Draft } from 'immer';
 import type { Planner, PlannerPeriod, PlannerStyle, PlannerTemplate, PlannerWidget, WidgetType } from './types';
 import { getState, makePage, newBlock, update } from './store';
-import { uid } from './utils';
+import { monthLabel, uid } from './utils';
 import { toLocalIso } from './dates';
 
 /* ---------------- periods ---------------- */
@@ -35,10 +35,10 @@ export function periodDays(d: Date, period: PlannerPeriod, weekStart: 0 | 1): st
 const WD = ['日', '一', '二', '三', '四', '五', '六'];
 export function periodLabel(d: Date, period: PlannerPeriod, weekStart: 0 | 1): string {
   const s = periodStart(d, period, weekStart);
-  if (period === 'month') return `${s.getFullYear()}年${s.getMonth() + 1}月`;
-  if (period === 'day') return `${s.getFullYear()}年${s.getMonth() + 1}月${s.getDate()}日（${WD[s.getDay()]}）`;
+  if (period === 'month') return monthLabel(s);
+  if (period === 'day') return `${monthLabel(s)}${s.getDate()}日（${WD[s.getDay()]}）`;
   const e = new Date(s); e.setDate(s.getDate() + 6);
-  return `${s.getFullYear()}年${s.getMonth() + 1}月${s.getDate()}日 – ${e.getMonth() + 1}月${e.getDate()}日`;
+  return `${monthLabel(s)}${s.getDate()}日 – ${e.getMonth() + 1}月${e.getDate()}日`;
 }
 
 export const PERIOD_NAMES: Record<PlannerPeriod, string> = { month: '每月', week: '每週', day: '每日' };

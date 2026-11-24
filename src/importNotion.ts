@@ -113,7 +113,10 @@ function parseOneDate(raw: string): string | null {
 function parseDayOnly(v: string): string | null {
   const s = v.trim();
   if (!s) return null;
-  let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(s);
+  // 民國年: "民國115年11月23日", "115年11月23日", "115/11/23"
+  let m = /^(?:民國|中華民國)?\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(s) || /^(\d{2,3})[/.-](\d{1,2})[/.-](\d{1,2})(?!\d)/.exec(s);
+  if (m) return toISODate(new Date(+m[1] + 1911, +m[2] - 1, +m[3]));
+  m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(s);
   if (m) return toISODate(new Date(+m[1], +m[2] - 1, +m[3]));
   m = /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(s);
   if (m) return toISODate(new Date(+m[1], +m[2] - 1, +m[3]));

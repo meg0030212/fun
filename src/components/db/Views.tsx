@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import type { Database, Page, Property, View } from '../../types';
 import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
 import { openPeek } from '../../ui';
-import { COLORS, htmlToText, uid } from '../../utils';
+import { COLORS, htmlToText, monthLabel, uid } from '../../utils';
 import { DateVal, datePart, daysCovered, endTime, formatTime, hasTime, moveDate, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Icon } from '../Icons';
 import { MenuItem, Popover, MenuSep } from '../Popover';
@@ -407,9 +407,9 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
   const header = (
     <div className="cal-head">
       <div className="cal-month">
-        {mode === 'month' ? `${anchor.getFullYear()}年${anchor.getMonth() + 1}月` : (() => {
+        {mode === 'month' ? monthLabel(anchor) : (() => {
           const s0 = weekStart(anchor); const e0 = new Date(s0); e0.setDate(s0.getDate() + 6);
-          return `${s0.getFullYear()}年${s0.getMonth() + 1}月${s0.getDate()}日 – ${e0.getMonth() + 1}月${e0.getDate()}日`;
+          return `${monthLabel(s0)}${s0.getDate()}日 – ${e0.getMonth() + 1}月${e0.getDate()}日`;
         })()}
       </div>
       <span className="spacer" />

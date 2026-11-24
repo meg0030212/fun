@@ -305,11 +305,19 @@ function formatDateWith(d: Date, fmt: string): string {
   const p2 = (n: number) => String(n).padStart(2, '0');
   const h = d.getHours();
   const map: Record<string, string> = {
-    YYYY: String(d.getFullYear()), YY: String(d.getFullYear()).slice(2), MMMM: `${d.getMonth() + 1}月`, MM: p2(d.getMonth() + 1), M: String(d.getMonth() + 1),
+    YYYY: String(d.getFullYear()), YY: String(d.getFullYear()).slice(2), R: String(d.getFullYear() - 1911), MMMM: `${d.getMonth() + 1}月`, MM: p2(d.getMonth() + 1), M: String(d.getMonth() + 1),
     DD: p2(d.getDate()), D: String(d.getDate()), dddd: WEEKDAY[d.getDay()], ddd: WEEKDAY[d.getDay()].slice(1), HH: p2(h), H: String(h),
     hh: p2(h % 12 || 12), h: String(h % 12 || 12), mm: p2(d.getMinutes()), m: String(d.getMinutes()), A: h < 12 ? '上午' : '下午', a: h < 12 ? 'am' : 'pm',
   };
-  return fmt.replace(/YYYY|YY|MMMM|MM|M|DD|D|dddd|ddd|HH|H|hh|h|mm|m|A|a/g, (k) => map[k]);
+  return fmt.replace(/YYYY|YY|R|MMMM|MM|M|DD|D|dddd|ddd|HH|H|hh|h|mm|m|A|a/g, (k) => map[k]);
+}
+
+/** "115/11/23" or "民國115年11月23日" → "2026-11-23" (other text unchanged) */
+function rocToIso(s: string): string {
+  const m = /^(?:民國|中華民國)?\s*(\d{2,3})\s*(?:年|\/|-|\.)\s*(\d{1,2})\s*(?:月|\/|-|\.)\s*(\d{1,2})\s*日?(.*)$/.exec(s);
+  if (!m) return s;
+  const p2 = (x: string) => x.padStart(2, '0');
+  return `${+m[1] + 1911}-${p2(m[2])}-${p2(m[3])}${m[4] ? m[4] : ''}`;
 }
 
 /* ---------------- evaluation ---------------- */
@@ -446,8 +454,9 @@ const FNS: Record<string, Fn> = {
   dateStart: ([d]) => { const x = date(d, 'dateStart'); return new FDate(x.start, null, x.time); },
   dateEnd: ([d]) => { const x = date(d, 'dateEnd'); return new FDate(x.end || x.start, null, x.time); },
   formatDate: ([d, f]) => formatDateWith(date(d, 'formatDate').start, f === undefined ? 'YYYY/MM/DD' : str(f)),
-  parseDate: ([t]) => { const d = parseDateValue(str(t).trim().replace(/\//g, '-').replace(' ', 'T')); return d ? fromDateVal(d) : fail(`無法解析日期「${str(t)}」，請用 2026-11-23 或 2026-11-23T14:30`); },
+  parseDate: ([t]) => { const d = parseDateValue(rocToIso(str(t).trim()).replace(/\//g, '-').replace(' ', 'T')); return d ? fromDateVal(d) : fail(`無法解析日期「${str(t)}」，請用 2026-11-23 或 2026-11-23T14:30`); },
   year: ([d]) => date(d, 'year').start.getFullYear(),
+  rocYear: ([d]) => date(d, 'rocYear').start.getFullYear() - 1911,
   month: ([d]) => date(d, 'month').start.getMonth() + 1,
   date: ([d]) => date(d, 'date').start.getDate(),
   day: ([d]) => { const w = date(d, 'day').start.getDay(); return w === 0 ? 7 : w; },
@@ -599,7 +608,8 @@ export const FN_DOCS: FnDoc[] = [
   { cat: '日期', name: 'dateAdd', sig: 'dateAdd(日期, 數量, 單位)', desc: '把日期往後加。', ex: 'dateAdd(prop("日期"), 7, "days")' },
   { cat: '日期', name: 'dateSubtract', sig: 'dateSubtract(日期, 數量, 單位)', desc: '把日期往前減。', ex: 'dateSubtract(prop("日期"), 1, "months")' },
   { cat: '日期', name: 'dateStart', sig: 'dateStart(日期)／dateEnd(日期)', desc: '取得日期範圍的開始或結束。', ex: 'dateBetween(dateEnd(prop("日期")), dateStart(prop("日期")), "minutes")' },
-  { cat: '日期', name: 'formatDate', sig: 'formatDate(日期, 格式)', desc: '自訂日期文字。格式：YYYY MM DD HH mm dddd(星期) A(上午/下午)。', ex: 'formatDate(prop("日期"), "M/D dddd HH:mm")' },
+  { cat: '日期', name: 'formatDate', sig: 'formatDate(日期, 格式)', desc: '自訂日期文字。格式：YYYY(西元年) R(民國年) MM DD HH mm dddd(星期) A(上午/下午)。', ex: 'formatDate(prop("日期"), "民國R年M月D日 dddd")' },
+  { cat: '日期', name: 'rocYear', sig: 'rocYear(日期)', desc: '民國年（西元年 − 1911）。', ex: 'rocYear(prop("日期"))' },
   { cat: '日期', name: 'year', sig: 'year()、month()、date()、day()、hour()、minute()、week()', desc: '取得年、月、日、星期（1=週一…7=週日）、時、分、週數。', ex: 'month(prop("日期"))' },
   { cat: '日期', name: 'parseDate', sig: 'parseDate(文字)', desc: '把 "2026-11-23" 或 "2026-11-23 14:30" 轉成日期。', ex: 'parseDate("2026-12-25")' },
   { cat: '清單', name: 'map', sig: 'map(清單, 運算)', desc: '對每個項目運算，用 current 代表目前項目、index 代表位置。', ex: 'map(prop("標籤"), "#" + current)' },

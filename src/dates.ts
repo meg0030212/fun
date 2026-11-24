@@ -3,9 +3,10 @@
    "2026-11-23T14:30"               a day with a time
    "2026-11-23T09:00/2026-11-23T10:30"  a range (either side may omit the time) */
 import type { Property } from './types';
+import { yearLabel } from './utils';
 
 export interface DateVal { start: string; end?: string }
-export type DateFormat = 'full' | 'short' | 'slash' | 'iso' | 'relative';
+export type DateFormat = 'full' | 'short' | 'slash' | 'iso' | 'relative' | 'roc' | 'roc-slash';
 export type TimeFormat = '24h' | '12h';
 
 const RE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/;
@@ -73,6 +74,8 @@ export function formatDay(day: string, fmt: DateFormat = 'full'): string {
   switch (fmt) {
     case 'short': return `${mo}月${da}日（${WEEK[d.getDay()]}）`;
     case 'slash': return `${y}/${pad(mo)}/${pad(da)}`;
+    case 'roc': return `${yearLabel(y, true)}${mo}月${da}日`;
+    case 'roc-slash': return `${y - 1911}/${pad(mo)}/${pad(da)}`;
     case 'iso': return `${y}-${pad(mo)}-${pad(da)}`;
     case 'relative': {
       const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -81,9 +84,9 @@ export function formatDay(day: string, fmt: DateFormat = 'full'): string {
       if (names[String(diff)]) return names[String(diff)];
       if (diff > 0 && diff < 7) return `${diff} 天後`;
       if (diff < 0 && diff > -7) return `${-diff} 天前`;
-      return `${y}年${mo}月${da}日`;
+      return `${yearLabel(y)}${mo}月${da}日`;
     }
-    default: return `${y}年${mo}月${da}日`;
+    default: return `${yearLabel(y)}${mo}月${da}日`;
   }
 }
 
