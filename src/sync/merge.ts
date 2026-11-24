@@ -8,12 +8,13 @@ export interface SyncPayload {
   pages: Record<string, Page>;
   dbs: Record<string, Database>;
   deleted: Record<string, number>;
+  plannerTemplates?: State['plannerTemplates'];
 }
 
 export function toPayload(s: State): SyncPayload {
   return {
     app: 'lumen', version: 1, savedAt: Date.now(), workspaceName: s.settings.workspaceName,
-    pages: s.pages, dbs: s.dbs, deleted: s.deleted || {},
+    pages: s.pages, dbs: s.dbs, deleted: s.deleted || {}, plannerTemplates: s.plannerTemplates || [],
   };
 }
 
@@ -62,7 +63,9 @@ export function mergeStates(local: State, remote: SyncPayload): State {
     }
   }
 
-  return { ...local, pages, dbs, deleted, recent: local.recent.filter((r) => pages[r]), pristine: false };
+  const tpl = new Map((remote.plannerTemplates || []).map((t) => [t.id, t]));
+  (local.plannerTemplates || []).forEach((t) => tpl.set(t.id, t));
+  return { ...local, pages, dbs, deleted, plannerTemplates: [...tpl.values()], recent: local.recent.filter((r) => pages[r]), pristine: false };
 }
 
 /** true when merging changed anything compared to the local state */

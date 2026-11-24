@@ -9,7 +9,7 @@ export interface SlashItem {
   keywords: string;
   type?: BlockType;
   extra?: Record<string, any>;
-  special?: 'page' | 'inline-db' | 'page-db' | 'date-today' | 'mention';
+  special?: 'page' | 'inline-db' | 'page-db' | 'date-today' | 'mention' | 'planner';
   view?: ViewType;
 }
 
@@ -42,6 +42,7 @@ export const SLASH_ITEMS: SlashItem[] = [
   { key: 'db-calendar', label: '行事曆檢視', desc: '以行事曆呈現的資料庫。', thumb: '📅', section: '資料庫', keywords: 'database calendar 行事曆 日曆', special: 'inline-db', view: 'calendar' },
   { key: 'db-page', label: '資料庫 - 整頁', desc: '新增整頁資料庫作為子頁面。', thumb: '🗃', section: '資料庫', keywords: 'database full page 資料庫 整頁', special: 'page-db', view: 'table' },
 
+  { key: 'planner', label: '電子手帳', desc: '像紙本手帳的月／週／日計畫頁，可自由組合區塊。', thumb: '📔', section: '資料庫', keywords: 'planner calendar diary 手帳 行事曆 計畫 日誌 週計畫 月計畫', special: 'planner' },
   { key: 'toc', label: '目錄', desc: '顯示頁面的標題大綱。', thumb: '≣', section: '進階區塊', keywords: 'toc table of contents outline 目錄', type: 'toc' },
   { key: 'equation', label: '方程式區塊', desc: '使用 KaTeX 顯示數學公式。', thumb: 'Σ', section: '進階區塊', keywords: 'equation math latex katex formula 公式 方程式', type: 'equation' },
   { key: 'today', label: '今天日期', desc: '插入今天的日期。', thumb: '@', section: '行內', keywords: 'date today now 日期 今天', special: 'date-today' },

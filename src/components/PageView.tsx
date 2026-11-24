@@ -20,6 +20,7 @@ import { Icon } from './Icons';
 import { DatabaseView } from './db/DatabaseView';
 import { AddPropertyMenu, PropIcon, PropValue, PropertyMenu } from './db/Property';
 import { TEXT_TYPES } from '../blockTypes';
+import { PlannerView } from './planner/PlannerView';
 
 export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
   const page = useStore((s) => s.pages[pageId]);
@@ -57,7 +58,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
 
   const trashed = isTrashed(page.id);
   const readOnly = !!page.locked || trashed;
-  const isDbPage = !!page.dbId;
+  const isDbPage = !!page.dbId || !!page.planner;
 
   const focusFirstBlock = () => {
     if (isDbPage) return;
@@ -163,7 +164,9 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
         )}
         {page.rowOf && <div className="row-divider" />}
       </div>
-      {isDbPage ? (
+      {page.planner ? (
+        <div className="page-db"><PlannerView page={page} readOnly={readOnly} /></div>
+      ) : isDbPage ? (
         <div className="page-db"><DatabaseView dbId={page.dbId!} /></div>
       ) : (
         <div className="page-content">

@@ -13,7 +13,7 @@ import { SlashMenu, MentionMenu, MentionItem } from './SlashMenu';
 import { BlockMenu } from './BlockMenu';
 import { Icon } from './Icons';
 import { BlockContentExtra } from './Blocks';
-import { navigate, toast } from '../ui';
+import { navigate, setUI, toast } from '../ui';
 import { blocksToMarkdown, markdownToBlocks } from '../markdown';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -200,6 +200,10 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
       const pid = createPage({ parentId: pageId });
       updateBlock(id, { type: 'page', pageId: pid, html: '' });
       navigate(pid);
+      return;
+    }
+    if (item.special === 'planner') {
+      setUI({ plannerPick: { mode: 'new', parentId: pageId, replaceBlock: { pageId, blockId: id } } });
       return;
     }
     if (item.special === 'page-db') {
