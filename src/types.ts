@@ -159,8 +159,10 @@ export interface WidgetOpts {
   startHour?: number;
   endHour?: number;
   step?: 30 | 60;
-  /** month / slots / schedule: show events from this database */
+  /** legacy single database link (migrated into planner sources) */
   dbId?: string;
+  /** month / slots / schedule: which planner sources to show (undefined = all) */
+  sourceIds?: string[];
   /** habit tracker rows */
   habits?: { id: string; name: string }[];
 }
@@ -189,6 +191,22 @@ export interface Planner {
   style: PlannerStyle;
   /** period key ("2026-11", week start "2026-11-23", day "2026-11-24") → widget id → content */
   entries: Record<string, Record<string, any>>;
+  /** linked databases whose dated rows appear in the planner */
+  sources?: PlannerSource[];
+  /** source that new events are added to */
+  addTo?: string;
+}
+
+/** a database linked into a planner, optionally narrowed by filters (e.g. 類別 是 工作) */
+export interface PlannerSource {
+  id: string;
+  dbId: string;
+  name?: string;
+  color: string;
+  filters: Filter[];
+  /** date property to place rows by (default: first date property) */
+  dateProp?: string;
+  hidden?: boolean;
 }
 
 export interface PlannerTemplate {
@@ -199,5 +217,7 @@ export interface PlannerTemplate {
   period: PlannerPeriod;
   widgets: PlannerWidget[];
   style: PlannerStyle;
+  /** linked data sources carried by a user template */
+  sources?: PlannerSource[];
   builtin?: boolean;
 }

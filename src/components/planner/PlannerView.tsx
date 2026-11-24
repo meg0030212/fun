@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Page, PlannerPeriod, PlannerWidget, WidgetType } from '../../types';
 import { askConfirm, setUI, toast } from '../../ui';
 import { COLORS, COLOR_NAMES, uid } from '../../utils';
@@ -7,7 +7,12 @@ import {
 } from '../../planner';
 import { Icon } from '../Icons';
 import { MenuHeader, MenuItem, MenuSep, Popover } from '../Popover';
-import { WIDGETS, DbPicker } from './Widgets';
+import { WIDGETS, WidgetSourceSelect, SourcePicker, sourceName, dbTitle } from './Widgets';
+import { addSource, migrateWidgetDbLinks, removeSource, updateSource } from '../../planner';
+import { useStore } from '../../store';
+import { navigate } from '../../ui';
+import { describeFilters } from '../db/dbutils';
+import { FilterRows } from '../db/FilterEditor';
 
 const WIDTHS: [number, string][] = [[3, '1/4'], [4, '1/3'], [6, '1/2'], [8, '2/3'], [9, '3/4'], [12, '整列']];
 const PAPERS: [string, string][] = [['plain', '空白'], ['grid', '方格'], ['dots', '點點'], ['lined', '橫線']];
@@ -16,7 +21,11 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
   const pl = page.planner!;
   const [anchor, setAnchor] = useState(() => new Date());
   const [edit, setEdit] = useState(false);
-  const [pop, setPop] = useState<null | { kind: 'layout' | 'tpl' | 'add' | 'save'; anchor: HTMLElement }>(null);
+  const [pop, setPop] = useState<null | { kind: 'layout' | 'tpl' | 'add' | 'save' | 'src-add'; anchor: HTMLElement }>(null);
+  const [srcEdit, setSrcEdit] = useState<{ id: string; anchor: HTMLElement } | null>(null);
+  useEffect(() => { if (!readOnly) migrateWidgetDbLinks(page.id); }, [page.id]); // eslint-disable-line
+  const sources = pl.sources || [];
+  const dbs = useStore((s) => s.dbs);
   const [settings, setSettings] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
   const ws = pl.style.weekStart;
@@ -59,6 +68,23 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
           </div>
         )}
       </div>
+      {(sources.length > 0 || canEdit) && (
+        <div className="pl-sources">
+          <span className="pl-sources-label">資料來源</span>
+          {sources.map((s) => (
+            <div key={s.id} className={'pl-src-chip' + (s.hidden ? ' off' : '')} style={{ ['--src' as any]: `var(--c-${s.color})`, ['--src-bg' as any]: `var(--b-${s.color})` }}>
+              <button className="pl-src-toggle" title={s.hidden ? '顯示這個來源' : '隱藏這個來源'} aria-pressed={!s.hidden}
+                onClick={() => updateSource(page.id, s.id, (x) => { x.hidden = !x.hidden; })}>{!s.hidden && <Icon.check size={11} />}</button>
+              <button className="pl-src-name" title="設定篩選、顏色" onClick={(e) => canEdit && setSrcEdit({ id: s.id, anchor: e.currentTarget })}>
+                {sourceName(s)}
+                {s.filters.length > 0 && <span className="pl-src-filter"><Icon.filter size={11} /> {dbs[s.dbId] ? describeFilters(dbs[s.dbId], s.filters) || '篩選' : '篩選'}</span>}
+              </button>
+            </div>
+          ))}
+          {canEdit && <button className="btn-ghost sm muted" onClick={(e) => setPop({ kind: 'src-add', anchor: e.currentTarget })}><Icon.plus size={13} /> 連結資料</button>}
+          {sources.length === 0 && <span className="muted small">連結你的排程資料庫，行程就會出現在月曆、時段表與行程區塊，並保持同步。</span>}
+        </div>
+      )}
       {edit && <div className="pl-edit-hint">拖曳區塊標題可以調整順序；用寬度、高度選單調整大小；按 ⚙ 修改內容設定。</div>}
 
       <div className={'pl-grid' + (edit ? ' editing' : '')}>
@@ -165,6 +191,23 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
 
       {pop?.kind === 'save' && <SaveTemplatePopover page={page} anchor={pop.anchor} onClose={() => setPop(null)} />}
 
+      {pop?.kind === 'src-add' && (
+        <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={320}>
+          <div className="pl-form">
+            <div className="strong">連結資料</div>
+            <div className="muted small">選擇有日期欄位的資料庫（例如你的排程）。連結後可以設定篩選，例如只顯示「類別 是 工作」。</div>
+            <SourcePicker page={page} onPick={(dbId) => {
+              const id = addSource(page.id, dbId);
+              const a = pop.anchor;
+              setPop(null);
+              setSrcEdit({ id, anchor: a });
+            }} />
+          </div>
+        </Popover>
+      )}
+      {srcEdit && sources.find((s) => s.id === srcEdit.id) && (
+        <SourceEditor page={page} srcId={srcEdit.id} anchor={srcEdit.anchor} onClose={() => setSrcEdit(null)} />
+      )}
       {settings && (() => {
         const w = pl.widgets.find((x) => x.id === settings.id);
         return w ? <WidgetSettings page={page} w={w} anchor={settings.anchor} onClose={() => setSettings(null)} /> : null;
@@ -267,8 +310,8 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
 
         {(w.type === 'month' || w.type === 'slots' || w.type === 'schedule') && (
           <>
-            <div className="muted small">{w.type === 'schedule' ? '行程來源' : '同時顯示這個資料庫的行程'}</div>
-            <DbPicker page={page} w={w} />
+            <div className="muted small">這個區塊顯示的行程</div>
+            <WidgetSourceSelect page={page} w={w} />
           </>
         )}
 
@@ -288,6 +331,53 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
             </div>
           </div>
         )}
+      </div>
+    </Popover>
+  );
+}
+
+function SourceEditor({ page, srcId, anchor, onClose }: { page: Page; srcId: string; anchor: HTMLElement; onClose: () => void }) {
+  const src = page.planner?.sources?.find((s) => s.id === srcId);
+  const db = useStore((s) => (src ? s.dbs[src.dbId] : undefined));
+  const [name, setName] = useState(src?.name || '');
+  if (!src) return null;
+  const dateProps = db?.properties.filter((p) => p.type === 'date') || [];
+  const isDefault = page.planner?.addTo === src.id;
+  const saveName = () => name !== (src.name || '') && updateSource(page.id, src.id, (x) => { x.name = name.trim() || undefined; });
+  return (
+    <Popover anchor={anchor} onClose={() => { saveName(); onClose(); }} width={540}>
+      <div className="pl-form">
+        <div className="pl-src-head">
+          <span className="pl-src-dot lg" style={{ background: `var(--c-${src.color})` }} />
+          <input className="input" aria-label="顯示名稱" value={name} placeholder={dbTitle(src.dbId)} onChange={(e) => setName(e.target.value)} onBlur={saveName} />
+        </div>
+        <div className="muted small">來源：{dbTitle(src.dbId)}{db && <button className="btn-ghost sm" onClick={() => { saveName(); onClose(); navigate(db.hostPageId); }}>開啟資料庫</button>}</div>
+        <div className="pl-swatches">
+          {COLORS.slice(1).map((c) => (
+            <button key={c} className={'pl-swatch' + (src.color === c ? ' on' : '')} title={COLOR_NAMES[c]} style={{ background: `var(--c-${c})` }}
+              onClick={() => updateSource(page.id, src.id, (x) => { x.color = c; })} />
+          ))}
+        </div>
+        {dateProps.length > 1 && (
+          <div className="menu-row" style={{ padding: 0 }}>
+            <span className="muted small">依哪個日期放到手帳上</span>
+            <select className="select-sm" value={src.dateProp || dateProps[0].id} onChange={(e) => updateSource(page.id, src.id, (x) => { x.dateProp = e.target.value; })}>
+              {dateProps.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="strong small" style={{ marginTop: 4 }}>篩選</div>
+        {db ? (
+          <FilterRows db={db} filters={src.filters} empty="顯示這個資料庫的全部行程。新增條件可以只看部分內容，例如「類別 是 工作」。"
+            onChange={(next) => updateSource(page.id, src.id, (x) => { x.filters = next as any; })} />
+        ) : <div className="muted small">找不到這個資料庫，可能已被刪除。</div>}
+        {src.filters.length > 0 && <div className="muted small">從這本手帳新增的行程，會自動填入符合篩選的值（例如類別設為「工作」）。</div>}
+        <label className="pl-src-opt"><input type="checkbox" checked={isDefault} onChange={(e) => updatePlanner(page.id, (p) => { p.addTo = e.target.checked ? src.id : p.sources?.find((s) => s.id !== src.id)?.id; })} /> 在手帳上新增行程時，預設加到這裡</label>
+        <label className="pl-src-opt"><input type="checkbox" checked={!!src.hidden} onChange={(e) => updateSource(page.id, src.id, (x) => { x.hidden = e.target.checked; })} /> 暫時隱藏</label>
+        <div className="pl-edit-row" style={{ justifyContent: 'space-between', marginTop: 4 }}>
+          <button className="btn-ghost sm danger" onClick={() => { removeSource(page.id, src.id); onClose(); }}><Icon.trash size={13} /> 取消連結</button>
+          <button className="btn-primary sm" onClick={() => { saveName(); onClose(); }}>完成</button>
+        </div>
       </div>
     </Popover>
   );

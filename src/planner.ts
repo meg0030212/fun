@@ -1,5 +1,5 @@
 import type { Draft } from 'immer';
-import type { Planner, PlannerPeriod, PlannerStyle, PlannerTemplate, PlannerWidget, WidgetType } from './types';
+import type { Planner, PlannerPeriod, PlannerSource, PlannerStyle, PlannerTemplate, PlannerWidget, WidgetType } from './types';
 import { getState, makePage, newBlock, update } from './store';
 import { monthLabel, uid } from './utils';
 import { toLocalIso } from './dates';
@@ -157,7 +157,7 @@ export function createPlannerPage(t: PlannerTemplate, parentId: string | null, a
   const page = makePage({
     title: t.builtin ? t.name : t.name, icon: t.icon, parentId, blocks: [],
     sort: siblings.length ? Math.max(...siblings.map((s) => s.sort)) + 1 : 0,
-    planner: { period: t.period, widgets: cloneWidgets(t.widgets), style: { ...t.style }, entries: {} },
+    planner: { period: t.period, widgets: cloneWidgets(t.widgets), style: { ...t.style }, entries: {}, sources: liveSources(t.sources) },
   });
   update((d) => {
     d.pages[page.id] = page;
@@ -188,7 +188,10 @@ export function updateEntry(pageId: string, key: string, widgetId: string, fn: (
 export function saveAsTemplate(pageId: string, name: string, icon: string, desc: string): string {
   const pl = getState().pages[pageId]?.planner;
   if (!pl) return '';
-  const t: PlannerTemplate = { id: uid(), name, icon, desc, period: pl.period, style: { ...pl.style }, widgets: JSON.parse(JSON.stringify(pl.widgets)) };
+  const t: PlannerTemplate = {
+    id: uid(), name, icon, desc, period: pl.period, style: { ...pl.style }, widgets: JSON.parse(JSON.stringify(pl.widgets)),
+    sources: pl.sources?.length ? JSON.parse(JSON.stringify(pl.sources)) : undefined,
+  };
   update((d) => { d.plannerTemplates = [...(d.plannerTemplates || []), t]; });
   return t.id;
 }
@@ -201,6 +204,65 @@ export function applyTemplate(pageId: string, t: PlannerTemplate) {
   updatePlanner(pageId, (pl) => {
     pl.period = t.period;
     pl.style = { ...t.style };
-    pl.widgets = cloneWidgets(t.widgets) as any;
+    // widgets keep their source choices only when the sources come along with the template
+    pl.widgets = cloneWidgets(t.widgets).map((w) => (t.sources ? w : { ...w, opts: { ...w.opts, sourceIds: undefined } })) as any;
+    if (t.sources) pl.sources = liveSources(t.sources) as any;
   });
+}
+
+/* ---------------- data sources ---------------- */
+
+const SOURCE_COLORS = ['blue', 'green', 'orange', 'purple', 'pink', 'red', 'yellow', 'brown', 'gray'];
+
+/** sources whose database still exists (templates may outlive a database) */
+function liveSources(list?: PlannerSource[]): PlannerSource[] {
+  const dbs = getState().dbs;
+  return (list || []).filter((s) => dbs[s.dbId]).map((s) => JSON.parse(JSON.stringify(s)));
+}
+
+export function addSource(pageId: string, dbId: string, patch: Partial<PlannerSource> = {}): string {
+  const pl = getState().pages[pageId]?.planner;
+  const used = new Set((pl?.sources || []).map((s) => s.color));
+  const color = SOURCE_COLORS.find((c) => !used.has(c)) || 'blue';
+  const src: PlannerSource = { id: uid(), dbId, color, filters: [], ...patch };
+  updatePlanner(pageId, (p) => {
+    p.sources = [...(p.sources || []), src as any];
+    if (!p.addTo) p.addTo = src.id;
+  });
+  return src.id;
+}
+
+export function updateSource(pageId: string, id: string, fn: (s: Draft<PlannerSource>) => void) {
+  updatePlanner(pageId, (p) => { const s = p.sources?.find((x) => x.id === id); if (s) fn(s); });
+}
+
+export function removeSource(pageId: string, id: string) {
+  updatePlanner(pageId, (p) => {
+    p.sources = (p.sources || []).filter((s) => s.id !== id);
+    if (p.addTo === id) p.addTo = p.sources[0]?.id;
+    p.widgets.forEach((w) => { if (w.opts?.sourceIds) w.opts.sourceIds = w.opts.sourceIds.filter((x) => x !== id); });
+  });
+}
+
+/** older planners linked one database per block: turn those into planner sources */
+export function migrateWidgetDbLinks(pageId: string) {
+  const pl = getState().pages[pageId]?.planner;
+  if (!pl || !pl.widgets.some((w) => w.opts?.dbId)) return;
+  const distinct = new Set(pl.widgets.map((w) => w.opts?.dbId).filter(Boolean));
+  updatePlanner(pageId, (p) => {
+    p.sources = p.sources || [];
+    p.widgets.forEach((w) => {
+      const dbId = w.opts?.dbId;
+      if (!dbId) return;
+      let s = p.sources!.find((x) => x.dbId === dbId && !x.filters.length);
+      if (!s) {
+        s = { id: uid(), dbId, color: SOURCE_COLORS[p.sources!.length % SOURCE_COLORS.length], filters: [] } as any;
+        p.sources!.push(s as any);
+      }
+      // with a single linked database every block simply shows all sources
+      if (distinct.size > 1) w.opts!.sourceIds = [...new Set([...(w.opts!.sourceIds || []), s!.id])];
+      delete w.opts!.dbId;
+    });
+    if (!p.addTo && p.sources.length) p.addTo = p.sources[0].id;
+  }, 'silent');
 }

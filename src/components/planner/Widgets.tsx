@@ -1,10 +1,11 @@
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
-import type { Page, PlannerWidget } from '../../types';
+import type { Database, Page, PlannerSource, PlannerWidget } from '../../types';
 import { addRow, createDatabasePage, getState, patchPage, useStore } from '../../store';
 import { navigate, openPeek } from '../../ui';
 import { uid } from '../../utils';
 import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, timePart, toDate, toLocalIso } from '../../dates';
-import { slotsOf, updateEntry, updatePlanner } from '../../planner';
+import { addSource, slotsOf, updateEntry, updatePlanner } from '../../planner';
+import { defaultsFromFilters, filterRows } from '../db/dbutils';
 import { Editable } from '../Editable';
 import { Icon } from '../Icons';
 import { PageIcon } from '../EmojiPicker';
@@ -54,30 +55,61 @@ export function AutoText({ value, onChange, placeholder, readOnly, className, on
   );
 }
 
-/* ---------------- events from a database ---------------- */
+/* ---------------- events from linked sources ---------------- */
 
-export function useEvents(dbId: string | undefined, days: string[]) {
-  const pages = useStore((s) => s.pages);
-  const db = useStore((s) => (dbId ? s.dbs[dbId] : undefined));
-  return useMemo(() => {
-    if (!db) return [] as { row: Page; d: DateVal }[];
-    const prop = db.properties.find((p) => p.type === 'date');
-    if (!prop) return [];
-    const set = new Set(days);
-    const out: { row: Page; d: DateVal }[] = [];
-    Object.values(pages).forEach((r) => {
-      if (r.rowOf !== db.id || r.trashed) return;
-      const d = parseDateValue(r.props?.[prop.id]);
-      if (d && daysCovered(d).some((x) => set.has(x))) out.push({ row: r, d });
-    });
-    return out.sort((a, b) => toDate(a.d.start).getTime() - toDate(b.d.start).getTime());
-  }, [pages, db, days]);
+export type Ev = { row: Page; d: DateVal; src: PlannerSource };
+
+/** visible planner sources this block shows */
+export function widgetSources(page: Page, w: PlannerWidget): PlannerSource[] {
+  const all = (page.planner?.sources || []).filter((s) => !s.hidden);
+  const pick = w.opts?.sourceIds;
+  return pick ? all.filter((s) => pick.includes(s.id)) : all;
 }
 
-function EventChip({ ev, day }: { ev: { row: Page; d: DateVal }; day?: string }) {
+export function sourceDateProp(db: Database | undefined, src: PlannerSource) {
+  return db?.properties.find((p) => p.id === src.dateProp && p.type === 'date') || db?.properties.find((p) => p.type === 'date');
+}
+
+export function dbTitle(dbId: string): string {
+  const s = getState();
+  const d = s.dbs[dbId];
+  if (!d) return '（已刪除的資料庫）';
+  return d.inline ? d.title || '未命名資料庫' : s.pages[d.hostPageId]?.title || '未命名資料庫';
+}
+
+export function sourceName(src: PlannerSource): string {
+  return src.name?.trim() || dbTitle(src.dbId);
+}
+
+export function useSourceEvents(page: Page, w: PlannerWidget, days: string[]): Ev[] {
+  const pages = useStore((s) => s.pages);
+  const dbs = useStore((s) => s.dbs);
+  const sources = widgetSources(page, w);
+  const sig = JSON.stringify(sources);
+  return useMemo(() => {
+    const set = new Set(days);
+    const out: Ev[] = [];
+    const seen = new Set<string>();
+    sources.forEach((src) => {
+      const db = dbs[src.dbId];
+      const prop = sourceDateProp(db, src);
+      if (!db || !prop) return;
+      const rows = filterRows(Object.values(pages).filter((r) => r.rowOf === db.id && !r.trashed), db, src.filters);
+      rows.forEach((r) => {
+        if (seen.has(r.id)) return; // the same row can match two sources of one database
+        const d = parseDateValue(r.props?.[prop.id]);
+        if (d && daysCovered(d).some((x) => set.has(x))) { out.push({ row: r, d, src }); seen.add(r.id); }
+      });
+    });
+    return out.sort((a, b) => toDate(a.d.start).getTime() - toDate(b.d.start).getTime());
+  }, [pages, dbs, sig, days]); // eslint-disable-line
+}
+
+function EventChip({ ev, day }: { ev: Ev; day?: string }) {
   const t = hasTime(ev.d.start) && (!day || datePart(ev.d.start) === day) ? timePart(ev.d.start) : '';
   return (
-    <div className="pl-event" onClick={() => openPeek(ev.row.id)} title={ev.row.title}>
+    <div className="pl-event" onClick={() => openPeek(ev.row.id)} title={`${ev.row.title || '未命名'} · ${sourceName(ev.src)}`}
+      style={{ background: `var(--b-${ev.src.color})`, borderLeftColor: `var(--c-${ev.src.color})` }}>
       {t && <span className="pl-event-time">{t}</span>}
       {ev.row.icon && !/^(https?:|data:)/.test(ev.row.icon) && <span>{ev.row.icon}</span>}
       <span className="pl-event-title">{ev.row.title || '未命名'}</span>
@@ -85,10 +117,17 @@ function EventChip({ ev, day }: { ev: { row: Page; d: DateVal }; day?: string })
   );
 }
 
-/** add an event to the widget's database on a given day (optionally at a time) */
-export function addEvent(dbId: string, day: string, time?: string) {
-  const db = getState().dbs[dbId];
-  const prop = db?.properties.find((p) => p.type === 'date');
+/** the source new events go to: the planner default if this block shows it, else the block's first source */
+export function targetSource(page: Page, w: PlannerWidget): PlannerSource | undefined {
+  const list = widgetSources(page, w);
+  return list.find((s) => s.id === page.planner?.addTo) || list[0];
+}
+
+/** add an event on a day (optionally at a time); the source's filters pre-fill the row (e.g. 類別 = 工作) */
+export function addEvent(src: PlannerSource | undefined, day: string, time?: string) {
+  if (!src) return;
+  const db = getState().dbs[src.dbId];
+  const prop = sourceDateProp(db, src);
   if (!db || !prop) return;
   let value = day;
   if (time) {
@@ -96,7 +135,7 @@ export function addEvent(dbId: string, day: string, time?: string) {
     e.setHours(e.getHours() + 1);
     value = `${day}T${time}/${toLocalIso(e, true)}`;
   }
-  openPeek(addRow(db.id, { [prop.id]: value }));
+  openPeek(addRow(db.id, { ...defaultsFromFilters(db, { filters: src.filters }), [prop.id]: value }));
 }
 
 /* ---------------- notes ---------------- */
@@ -183,7 +222,8 @@ export function MonthWidget(p: WidgetProps) {
   const cells: (string | null)[] = [...Array(lead).fill(null), ...Array.from({ length: count }, (_, i) => toLocalIso(new Date(first.getFullYear(), first.getMonth(), i + 1), false))];
   while (cells.length % 7) cells.push(null);
   const monthDays = useMemo(() => cells.filter(Boolean) as string[], [p.pkey]); // eslint-disable-line
-  const events = useEvents(p.w.opts?.dbId, monthDays);
+  const events = useSourceEvents(p.page, p.w, monthDays);
+  const target = targetSource(p.page, p.w);
   const today = todayIso();
   return (
     <div className="pl-month">
@@ -192,7 +232,7 @@ export function MonthWidget(p: WidgetProps) {
         <div key={iso} className={'pl-month-cell' + (iso === today ? ' today' : '') + ([0, 6].includes(toDate(iso).getDay()) ? ' weekend' : '')}>
           <div className="pl-month-num">
             <span>{toDate(iso).getDate()}</span>
-            {p.w.opts?.dbId && !p.readOnly && <button className="pl-mini-add" title="新增行程" onClick={() => addEvent(p.w.opts!.dbId!, iso)}><Icon.plus size={11} /></button>}
+            {target && !p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, iso)}><Icon.plus size={11} /></button>}
           </div>
           {events.filter((e) => daysCovered(e.d).includes(iso)).map((e) => <EventChip key={e.row.id} ev={e} day={iso} />)}
           <AutoText value={data.days?.[iso] || ''} readOnly={p.readOnly} className="pl-cell-text"
@@ -209,7 +249,8 @@ export function SlotsWidget(p: WidgetProps) {
   const [data, set] = useEntry(p);
   const slots = slotsOf(p.w);
   const hourly = p.w.opts?.slotMode === 'hourly';
-  const events = useEvents(p.w.opts?.dbId, p.days);
+  const events = useSourceEvents(p.page, p.w, p.days);
+  const target = targetSource(p.page, p.w);
   const today = todayIso();
   const step = p.w.opts?.step || 60;
   const inSlot = (ev: { d: DateVal }, day: string, key: string) => {
@@ -236,13 +277,13 @@ export function SlotsWidget(p: WidgetProps) {
           </thead>
         )}
         <tbody>
-          {p.w.opts?.dbId && !hourly && (
+          {target && !hourly && (
             <tr className="pl-ev-row">
               {showLabels && <td className="pl-slot-label">行程</td>}
               {p.days.map((d) => (
                 <td key={d}>
                   {events.filter((e) => daysCovered(e.d).includes(d)).map((e) => <EventChip key={e.row.id} ev={e} day={d} />)}
-                  {!p.readOnly && <button className="pl-mini-add" title="新增行程" onClick={() => addEvent(p.w.opts!.dbId!, d)}><Icon.plus size={11} /></button>}
+                  {!p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, d)}><Icon.plus size={11} /></button>}
                 </td>
               ))}
             </tr>
@@ -257,7 +298,7 @@ export function SlotsWidget(p: WidgetProps) {
                     {hourly && events.filter((e) => inSlot(e, d, s.key)).map((e) => <EventChip key={e.row.id} ev={e} day={d} />)}
                     <AutoText value={data.cells?.[k] || ''} readOnly={p.readOnly} className="pl-cell-text"
                       onChange={(v) => set((x) => ({ ...x, cells: { ...(x.cells || {}), [k]: v } }), 'typing')} />
-                    {hourly && p.w.opts?.dbId && !p.readOnly && <button className="pl-mini-add" title="在此時段新增行程" onClick={() => addEvent(p.w.opts!.dbId!, d, s.key)}><Icon.plus size={11} /></button>}
+                    {hourly && target && !p.readOnly && <button className="pl-mini-add" title={`在此時段新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, d, s.key)}><Icon.plus size={11} /></button>}
                   </td>
                 );
               })}
@@ -269,67 +310,95 @@ export function SlotsWidget(p: WidgetProps) {
   );
 }
 
-/* ---------------- schedule (database) ---------------- */
+/* ---------------- schedule (linked sources) ---------------- */
 
-export function DbPicker({ page, w, onPicked }: { page: Page; w: PlannerWidget; onPicked?: () => void }) {
+/** pick an existing dated database, or create a new one under the planner page */
+export function SourcePicker({ page, onPick, label = '連結資料庫' }: { page: Page; onPick: (dbId: string) => void; label?: string }) {
   const dbs = useStore((s) => s.dbs);
   const pages = useStore((s) => s.pages);
-  const options = Object.values(dbs).filter((d) => d.properties.some((p) => p.type === 'date') && !pages[d.hostPageId]?.trashed);
-  const setDb = (dbId: string | undefined) => updatePlanner(page.id, (pl) => {
-    const x = pl.widgets.find((y) => y.id === w.id);
-    if (x) x.opts = { ...(x.opts || {}), dbId };
-  });
-  const titleOf = (dbId: string) => { const d = dbs[dbId]; return d.inline ? d.title || '未命名資料庫' : pages[d.hostPageId]?.title || '未命名資料庫'; };
+  const options = Object.values(dbs).filter((d) => d.properties.some((p) => p.type === 'date') && !pages[d.hostPageId]?.trashed && !pages[d.hostPageId]?.rowOf);
   return (
     <div className="pl-dbpick">
-      <select className="select-sm" value={w.opts?.dbId || ''} onChange={(e) => { setDb(e.target.value || undefined); onPicked?.(); }}>
-        <option value="">（不連結資料庫）</option>
-        {options.map((d) => <option key={d.id} value={d.id}>{titleOf(d.id)}</option>)}
+      <select className="select-sm" value="" aria-label={label} onChange={(e) => { if (e.target.value) onPick(e.target.value); }}>
+        <option value="">{label}：選擇有日期欄位的資料庫…</option>
+        {options.map((d) => <option key={d.id} value={d.id}>{dbTitle(d.id)}</option>)}
       </select>
       <button className="btn-ghost sm" onClick={() => {
         const pid = createDatabasePage(page.id, 'calendar', false);
         const dbId = getState().pages[pid].dbId!;
-        // name the new database after the widget so it is easy to find in the sidebar
-        patchPage(pid, { title: `${page.title || '手帳'} · ${w.title}`, icon: '📌' }, 'silent');
-        setDb(dbId);
-        onPicked?.();
+        // name the new database after the planner so it is easy to find in the sidebar
+        patchPage(pid, { title: `${page.title || '手帳'} · 行程`, icon: '📌' }, 'silent');
+        onPick(dbId);
       }}><Icon.plus size={12} /> 建立新的行程資料庫</button>
     </div>
   );
 }
 
+/** block settings: which planner sources this block shows */
+export function WidgetSourceSelect({ page, w }: { page: Page; w: PlannerWidget }) {
+  const sources = page.planner?.sources || [];
+  const pick = w.opts?.sourceIds;
+  const set = (ids: string[] | undefined) => updatePlanner(page.id, (pl) => {
+    const x = pl.widgets.find((y) => y.id === w.id);
+    if (x) x.opts = { ...(x.opts || {}), sourceIds: ids };
+  });
+  if (!sources.length) {
+    return <div className="muted small">這本手帳還沒有連結資料。在手帳上方的「資料來源」按「＋ 連結資料」，行程就會出現在月曆、時段表和行程區塊。</div>;
+  }
+  return (
+    <div className="pl-src-select">
+      <label className="pl-src-opt"><input type="checkbox" checked={!pick} onChange={(e) => set(e.target.checked ? undefined : sources.map((s) => s.id))} /> 顯示所有資料來源</label>
+      {sources.map((s) => (
+        <label key={s.id} className={'pl-src-opt' + (!pick ? ' dim' : '')}>
+          <input type="checkbox" disabled={!pick} checked={!pick || pick.includes(s.id)}
+            onChange={(e) => set(e.target.checked ? [...(pick || []), s.id] : (pick || []).filter((x) => x !== s.id))} />
+          <span className="pl-src-dot" style={{ background: `var(--c-${s.color})` }} /> {sourceName(s)}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function ScheduleWidget(p: WidgetProps) {
-  const dbId = p.w.opts?.dbId;
-  const db = useStore((s) => (dbId ? s.dbs[dbId] : undefined));
-  const events = useEvents(dbId, p.days);
-  if (!dbId || !db) {
+  const sources = widgetSources(p.page, p.w);
+  const events = useSourceEvents(p.page, p.w, p.days);
+  const [to, setTo] = React.useState<string>('');
+  if (!(p.page.planner?.sources || []).length) {
     return (
       <div className="pl-empty">
-        <div className="muted small">行程會從資料庫讀取，和行事曆、表格同步。請選擇一個有日期欄位的資料庫：</div>
-        {!p.readOnly && <DbPicker page={p.page} w={p.w} />}
+        <div className="muted small">行程會從資料庫讀取，和行事曆、表格同步。連結一個有日期欄位的資料庫（之後可在上方「資料來源」加入更多並設定篩選）：</div>
+        {!p.readOnly && <SourcePicker page={p.page} onPick={(dbId) => addSource(p.page.id, dbId)} />}
       </div>
     );
   }
-  const byDay = new Map<string, { row: Page; d: DateVal }[]>();
+  const byDay = new Map<string, Ev[]>();
   events.forEach((e) => {
     const d = p.days.includes(datePart(e.d.start)) ? datePart(e.d.start) : p.days[0];
     byDay.set(d, [...(byDay.get(d) || []), e]);
   });
   const today = todayIso();
   const addDay = p.days.includes(today) ? today : p.days[0];
+  const target = sources.find((s) => s.id === to) || targetSource(p.page, p.w);
   return (
     <div className="pl-schedule">
-      {events.length === 0 && <div className="muted small" style={{ padding: '4px 2px' }}>這段期間沒有行程。</div>}
+      {!sources.length && <div className="muted small">此區塊的資料來源目前都隱藏了。</div>}
+      {sources.length > 0 && events.length === 0 && <div className="muted small" style={{ padding: '4px 2px' }}>這段期間沒有行程。</div>}
       {[...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([d, list]) => (
         <div key={d} className="pl-sch-day">
           {p.days.length > 1 && <div className={'pl-sch-date' + (d === today ? ' today' : '')}>{toDate(d).getMonth() + 1}/{toDate(d).getDate()} 週{WD[toDate(d).getDay()]}</div>}
           <div className="pl-sch-items">{list.map((e) => <EventChip key={e.row.id} ev={e} day={d} />)}</div>
         </div>
       ))}
-      {!p.readOnly && <div className="pl-add" onClick={() => addEvent(dbId, addDay)}><Icon.plus size={13} /> 新增行程</div>}
-      <div className="pl-sch-src muted small" onClick={() => navigate(db.hostPageId)}>
-        <PageIcon icon={getState().pages[db.hostPageId]?.icon} size={12} /> 來源：{db.inline ? db.title || '未命名資料庫' : getState().pages[db.hostPageId]?.title || '未命名資料庫'}
-      </div>
+      {!p.readOnly && target && (
+        <div className="pl-sch-add">
+          <div className="pl-add" onClick={() => addEvent(target, addDay)}><Icon.plus size={13} /> 新增行程</div>
+          {sources.length > 1 && (
+            <select className="select-sm" value={target.id} aria-label="新增到" onChange={(e) => setTo(e.target.value)}>
+              {sources.map((s) => <option key={s.id} value={s.id}>到：{sourceName(s)}</option>)}
+            </select>
+          )}
+        </div>
+      )}
     </div>
   );
 }

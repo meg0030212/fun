@@ -7,6 +7,7 @@ import { Icon } from '../Icons';
 import { Popover, MenuItem, MenuSep, MenuHeader, Toggle } from '../Popover';
 import { defaultsFromFilters, opsFor, processRows } from './dbutils';
 import { PropIcon, Chip } from './Property';
+import { FilterRows } from './FilterEditor';
 import { TableView, BoardView, ListView, GalleryView, CalendarView } from './Views';
 
 export const VIEW_TYPES: { type: ViewType; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
@@ -150,52 +151,9 @@ function FilterChips({ db, view, onOpen }: { db: Database; view: View; onOpen: (
 }
 
 function FilterPopover({ db, view, anchor, onClose }: { db: Database; view: View; anchor: HTMLElement; onClose: () => void }) {
-  const add = () => {
-    const p = db.properties[0];
-    updateView(db.id, view.id, (v) => { v.filters.push({ id: uid(), propId: p.id, op: opsFor(p.type)[0].op }); });
-  };
   return (
     <Popover anchor={anchor} onClose={onClose} width={520}>
-      <div className="fs-pop">
-        {view.filters.length === 0 && <div className="muted small" style={{ padding: '6px 4px' }}>此檢視尚無篩選條件</div>}
-        {view.filters.map((f, i) => {
-          const p = db.properties.find((x) => x.id === f.propId) || db.properties[0];
-          const ops = opsFor(p.type);
-          const op = ops.find((o) => o.op === f.op) || ops[0];
-          return (
-            <div key={f.id} className="fs-row">
-              <span className="fs-where">{i === 0 ? '條件' : '且'}</span>
-              <select className="select-sm" value={p.id} onChange={(e) => {
-                const np = db.properties.find((x) => x.id === e.target.value)!;
-                updateView(db.id, view.id, (v) => { const ff = v.filters.find((x) => x.id === f.id)!; ff.propId = np.id; ff.op = opsFor(np.type)[0].op; ff.value = undefined; });
-              }}>
-                {db.properties.map((pp) => <option key={pp.id} value={pp.id}>{pp.name}</option>)}
-              </select>
-              <select className="select-sm" value={op.op} onChange={(e) => updateView(db.id, view.id, (v) => { v.filters.find((x) => x.id === f.id)!.op = e.target.value; })}>
-                {ops.map((o) => <option key={o.op} value={o.op}>{o.label}</option>)}
-              </select>
-              {!op.noValue && (
-                (p.type === 'select' || p.type === 'status' || p.type === 'multi_select') ? (
-                  <select className="select-sm grow" value={f.value || ''} onChange={(e) => updateView(db.id, view.id, (v) => { v.filters.find((x) => x.id === f.id)!.value = e.target.value; })}>
-                    <option value="">選擇選項…</option>
-                    {(p.options || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                ) : (
-                  <input className="input sm grow" type={p.type === 'number' ? 'number' : ['date', 'created_time', 'last_edited_time'].includes(p.type) ? 'date' : 'text'}
-                    placeholder="輸入值…" value={f.value ?? ''}
-                    onChange={(e) => updateView(db.id, view.id, (v) => { v.filters.find((x) => x.id === f.id)!.value = e.target.value; })} />
-                )
-              )}
-              {op.noValue && <span className="grow" />}
-              <button className="btn-icon" onClick={() => updateView(db.id, view.id, (v) => { v.filters = v.filters.filter((x) => x.id !== f.id); })}><Icon.x size={14} /></button>
-            </div>
-          );
-        })}
-        <div className="fs-actions">
-          <button className="btn-ghost sm" onClick={add}><Icon.plus size={14} /> 新增篩選條件</button>
-          {view.filters.length > 0 && <button className="btn-ghost sm danger" onClick={() => updateView(db.id, view.id, (v) => { v.filters = []; })}><Icon.trash size={14} /> 清除全部</button>}
-        </div>
-      </div>
+      <FilterRows db={db} filters={view.filters} onChange={(next) => updateView(db.id, view.id, (v) => { v.filters = next as any; })} />
     </Popover>
   );
 }

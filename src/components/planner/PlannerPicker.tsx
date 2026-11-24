@@ -5,6 +5,8 @@ import { askConfirm, navigate, setUI, toast, useUI } from '../../ui';
 import { applyTemplate, blankTemplate, builtinTemplates, createPlannerPage, deleteTemplate, PERIOD_NAMES, WIDGET_INFO } from '../../planner';
 import { Modal } from '../Popover';
 import { Icon } from '../Icons';
+import { dbTitle } from './Widgets';
+import { describeFilters } from '../db/dbutils';
 
 export type PlannerPick =
   | { mode: 'new'; parentId: string | null; replaceBlock?: { pageId: string; blockId: string } }
@@ -31,6 +33,7 @@ export function PlannerPickerHost() {
 
 function PlannerPicker({ req }: { req: PlannerPick }) {
   const custom = useStore((s) => s.plannerTemplates) || [];
+  const dbs = useStore((s) => s.dbs);
   const builtins = useMemo(builtinTemplates, []);
   const [blankPeriod, setBlankPeriod] = useState<PlannerPeriod>('month');
   const blank = blankTemplate(blankPeriod);
@@ -92,6 +95,15 @@ function PlannerPicker({ req }: { req: PlannerPick }) {
             </div>
           </div>
           {sel.desc && <p className="muted">{sel.desc}</p>}
+          {sel.sources && sel.sources.length > 0 && (
+            <div className="pl-tpl-sources">
+              <span className="muted small">已連結資料：</span>
+              {sel.sources.map((s) => (
+                <span key={s.id} className="pl-tpl-src"><span className="pl-src-dot" style={{ background: `var(--c-${s.color})` }} />
+                  {s.name || dbTitle(s.dbId)}{s.filters.length > 0 && dbs[s.dbId] ? `（${describeFilters(dbs[s.dbId], s.filters)}）` : ''}</span>
+              ))}
+            </div>
+          )}
           {sel.id.startsWith('blank') && (
             <div className="seg pl-seg" style={{ marginBottom: 12 }}>
               {(['month', 'week', 'day'] as PlannerPeriod[]).map((p) => (
