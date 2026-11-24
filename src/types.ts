@@ -59,7 +59,7 @@ export interface Page {
 export type PropType =
   | 'title' | 'text' | 'number' | 'select' | 'multi_select' | 'status'
   | 'date' | 'checkbox' | 'url' | 'email' | 'phone'
-  | 'created_time' | 'last_edited_time';
+  | 'created_time' | 'last_edited_time' | 'formula';
 
 export interface SelectOption {
   id: string;
@@ -77,6 +77,8 @@ export interface Property {
   timeFormat?: '24h' | '12h';
   /** date picker shortcuts: "HH:mm" or a slot "HH:mm-HH:mm" */
   quickTimes?: string[];
+  /** formula source for type 'formula' */
+  formula?: string;
 }
 
 export type ViewType = 'table' | 'board' | 'list' | 'gallery' | 'calendar';

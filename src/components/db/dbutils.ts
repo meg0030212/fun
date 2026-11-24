@@ -1,6 +1,7 @@
 import type { Database, Filter, Page, Property, PropType, View } from '../../types';
 import { formatDateTime, parseISODate } from '../../utils';
 import { formatDateValue, startTime } from '../../dates';
+import { FDate, formulaValue, toText, dateResultIso } from '../../formula';
 
 export const PROP_TYPES: { type: PropType; label: string }[] = [
   { type: 'text', label: '文字' },
@@ -15,6 +16,7 @@ export const PROP_TYPES: { type: PropType; label: string }[] = [
   { type: 'phone', label: '電話' },
   { type: 'created_time', label: '建立時間' },
   { type: 'last_edited_time', label: '上次編輯時間' },
+  { type: 'formula', label: '公式' },
 ];
 
 export function propTypeLabel(t: PropType) {
@@ -27,6 +29,14 @@ export function getValue(row: Page, prop: Property): any {
     case 'title': return row.title;
     case 'created_time': return row.createdAt;
     case 'last_edited_time': return row.updatedAt;
+    case 'formula': {
+      const r = formulaValue(row, prop);
+      if (!r.ok) return null;
+      const v = r.value;
+      if (v instanceof FDate) return dateResultIso(v);
+      if (typeof v === 'number' && !isFinite(v)) return null;
+      return v;
+    }
     default: return row.props?.[prop.id];
   }
 }
@@ -49,6 +59,11 @@ export function displayText(row: Page, prop: Property): string {
     case 'checkbox': return v ? '✓' : '';
     case 'created_time': case 'last_edited_time': return formatDateTime(v);
     case 'number': return formatNumber(v, prop);
+    case 'formula':
+      if (typeof v === 'number') return formatNumber(v, prop);
+      if (typeof v === 'boolean') return v ? '✓' : '';
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return formatDateValue(v, prop);
+      return toText(v);
     default: return String(v);
   }
 }
@@ -141,7 +156,7 @@ function matchFilter(row: Page, f: Filter, prop: Property): boolean {
       return f.op === 'is' ? d === t : f.op === 'before' ? d < t : d > t;
     }
     default: {
-      const s = String(v ?? '').toLowerCase();
+      const s = (prop.type === 'formula' ? displayText(row, prop) : String(v ?? '')).toLowerCase();
       const q = String(fv ?? '').toLowerCase();
       if (!q) return true;
       switch (f.op) {
@@ -166,6 +181,10 @@ function sortKey(row: Page, prop: Property): any {
     case 'multi_select': return (v as string[]).map((id) => optionName(prop, id)).join(',');
     case 'checkbox': return v ? 1 : 0;
     case 'date': return startTime(v);
+    case 'formula':
+      if (typeof v === 'number' || typeof v === 'boolean') return Number(v);
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return startTime(v);
+      return toText(v).toLowerCase();
     default: return typeof v === 'string' ? v.toLowerCase() : v;
   }
 }
@@ -220,10 +239,10 @@ export const CALCS: Record<string, { label: string; types?: PropType[] }> = {
   not_empty: { label: '非空白計數' },
   percent_empty: { label: '空白百分比' },
   percent_not_empty: { label: '非空白百分比' },
-  sum: { label: '總和', types: ['number'] },
-  avg: { label: '平均', types: ['number'] },
-  min: { label: '最小值', types: ['number'] },
-  max: { label: '最大值', types: ['number'] },
+  sum: { label: '總和', types: ['number', 'formula'] },
+  avg: { label: '平均', types: ['number', 'formula'] },
+  min: { label: '最小值', types: ['number', 'formula'] },
+  max: { label: '最大值', types: ['number', 'formula'] },
   checked: { label: '已勾選', types: ['checkbox'] },
   percent_checked: { label: '已勾選百分比', types: ['checkbox'] },
 };
