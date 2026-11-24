@@ -51,6 +51,7 @@ export interface Page {
   locked?: boolean;
   comments: Comment[];
   dbId?: string; // full-page database
+  planner?: Planner; // digital planner page
   rowOf?: string; // database row
   props?: Record<string, any>;
   sort: number;
@@ -137,6 +138,64 @@ export interface State {
   recent: string[];
   /** ids of permanently deleted pages/databases → deletion time (used by sync) */
   deleted?: Record<string, number>;
+  /** user-made planner layouts */
+  plannerTemplates?: PlannerTemplate[];
   /** true while the workspace still holds only the untouched example content */
   pristine?: boolean;
+}
+
+/* ---------------- digital planner ---------------- */
+export type PlannerPeriod = 'day' | 'week' | 'month';
+export type WidgetType = 'notes' | 'list' | 'month' | 'slots' | 'schedule' | 'habit';
+
+export interface WidgetOpts {
+  /** list: bullet style */
+  style?: 'check' | 'bullet' | 'number';
+  /** slots: how a day is divided */
+  slotMode?: 'custom' | 'hourly' | 'none';
+  slots?: { id: string; label: string }[];
+  startHour?: number;
+  endHour?: number;
+  step?: 30 | 60;
+  /** month / slots / schedule: show events from this database */
+  dbId?: string;
+  /** habit tracker rows */
+  habits?: { id: string; name: string }[];
+}
+
+export interface PlannerWidget {
+  id: string;
+  type: WidgetType;
+  title: string;
+  /** width in 12-column grid */
+  w: number;
+  /** height in grid rows */
+  h: number;
+  color?: string;
+  opts?: WidgetOpts;
+}
+
+export interface PlannerStyle {
+  paper: 'plain' | 'grid' | 'dots' | 'lined';
+  accent: string;
+  weekStart: 0 | 1;
+}
+
+export interface Planner {
+  period: PlannerPeriod;
+  widgets: PlannerWidget[];
+  style: PlannerStyle;
+  /** period key ("2026-11", week start "2026-11-23", day "2026-11-24") → widget id → content */
+  entries: Record<string, Record<string, any>>;
+}
+
+export interface PlannerTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  desc?: string;
+  period: PlannerPeriod;
+  widgets: PlannerWidget[];
+  style: PlannerStyle;
+  builtin?: boolean;
 }

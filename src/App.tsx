@@ -9,6 +9,7 @@ import { FormatToolbar } from './components/FormatToolbar';
 import { PasswordDialog } from './components/SyncPanel';
 import { ImportModal } from './components/ImportModal';
 import { FormulaEditorHost } from './components/FormulaEditor';
+import { PlannerPickerHost } from './components/planner/PlannerPicker';
 
 function useTheme() {
   const theme = useStore((s) => s.settings.theme);
@@ -103,6 +104,7 @@ export default function App() {
       {templates && <TemplatesModal />}
       {importer && <ImportModal />}
       <FormulaEditorHost />
+      <PlannerPickerHost />
       <FormatToolbar />
       <ConfirmDialog />
       <PasswordDialog />
