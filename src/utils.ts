@@ -31,11 +31,23 @@ export function timeAgo(t: number): string {
   return new Date(t).toLocaleDateString('zh-TW');
 }
 
+/* ---------- era: 西元 or 民國 ---------- */
+let rocEra = false;
+export function setRocEra(on: boolean) { rocEra = on; }
+export function isRocEra() { return rocEra; }
+/** "2026年" or "民國115年" depending on the workspace setting (or forced) */
+export function yearLabel(y: number, roc = rocEra): string {
+  if (!roc) return `${y}年`;
+  return y > 1911 ? `民國${y - 1911}年` : `民國前${1912 - y}年`;
+}
+/** "2026年11月" / "民國115年11月" */
+export function monthLabel(d: Date): string { return `${yearLabel(d.getFullYear())}${d.getMonth() + 1}月`; }
+
 export function formatDate(v: string | number | undefined | null): string {
   if (v === undefined || v === null || v === '') return '';
   const d = typeof v === 'number' ? new Date(v) : parseISODate(v);
   if (!d || isNaN(d.getTime())) return String(v);
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  return `${yearLabel(d.getFullYear())}${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 export function formatDateTime(t: number): string {

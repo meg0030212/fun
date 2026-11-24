@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { redo, undo, updateSettings, useStore, visitPage, getState } from './store';
+import { setRocEra } from './utils';
 import { setUI, toast, useUI } from './ui';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -27,6 +28,8 @@ function useTheme() {
 
 export default function App() {
   useTheme();
+  const era = useStore((s) => s.settings.era);
+  setRocEra(era === 'roc'); // read by date formatting during this render
   const route = useUI((u) => u.route);
   const peek = useUI((u) => u.peek);
   const search = useUI((u) => u.search);

@@ -190,6 +190,12 @@ export function SettingsModal() {
                   <option value="system">使用系統設定</option><option value="light">淺色</option><option value="dark">深色</option>
                 </select>
               </div>
+              <div className="set-line">
+                <div><div>年份顯示</div><div className="muted small">月曆、行事曆、手帳與日期的年份要用西元或民國。個別日期欄位也可在欄位選單另外設定。</div></div>
+                <select className="select-sm" value={settings.era || 'gregorian'} onChange={(e) => updateSettings({ era: e.target.value as any })}>
+                  <option value="gregorian">西元（2026年）</option><option value="roc">民國（民國115年）</option>
+                </select>
+              </div>
             </>
           )}
           {tab === 'sync' && <SyncSettings />}
