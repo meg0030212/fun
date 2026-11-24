@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import type { Database, Page, Property, PropType, SelectOption, View } from '../../types';
 import { setRowProp, patchPage, updateDb, updateView, makeProp } from '../../store';
-import { COLORS, COLOR_NAMES, formatDateTime, monthLabel, safeUrl, uid, yearLabel } from '../../utils';
+import { COLORS, COLOR_NAMES, formatDateTime, isRocEra, monthLabel, safeUrl, uid, yearLabel } from '../../utils';
+import { parseTypedDate, typedDateText, formatDay } from '../../dates';
 import { DateVal, datePart, formatDateValue, formatTime, hasTime, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Popover, MenuItem, MenuSep, MenuHeader, Anchor, Toggle } from '../Popover';
 import { askConfirm, setUI } from '../../ui';
@@ -136,6 +137,47 @@ export function OptionMenu({ db, prop, opt, anchor, onClose }: { db: Database; p
 /* ---------------- date editor ---------------- */
 const DEFAULT_QUICK = ['09:00', '12:00', '14:00', '18:00', '20:00'];
 
+/** typed date box: 民國 "0300903" / 西元 "20261123", also 30/9/3, 民國30年9月3日, 2026/11/23 … */
+function DateTextInput({ value, roc, autoFocus, onCommit, onFocus, onDone }: {
+  value: string; roc: boolean; autoFocus?: boolean; onCommit: (day: string) => void; onFocus?: () => void; onDone?: () => void;
+}) {
+  const shown = value ? typedDateText(value, roc) : '';
+  const [text, setText] = useState(shown);
+  const [focused, setFocused] = useState(false);
+  React.useEffect(() => { if (!focused) setText(shown); }, [shown, focused]);
+  const typed = text.trim() && text !== shown ? text : '';
+  const parsed = typed ? parseTypedDate(typed, roc) : null;
+  const apply = () => {
+    if (!typed) return true;
+    if (!parsed) return false;
+    onCommit(parsed);
+    setText(typedDateText(parsed, roc));
+    return true;
+  };
+  return (
+    <div className="date-text">
+      <input className={'input sm' + (typed && !parsed ? ' invalid' : '')} value={text} autoFocus={autoFocus} inputMode="numeric"
+        placeholder={roc ? '民國，例如 1151123' : '西元，例如 20261123'}
+        aria-label={roc ? '日期（民國）' : '日期（西元）'}
+        onFocus={(e) => { setFocused(true); e.target.select(); onFocus?.(); }}
+        onBlur={() => { setFocused(false); if (!apply()) setText(shown); }}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Enter') { e.preventDefault(); if (apply() && (parsed || !typed)) onDone?.(); }
+          if (e.key === 'Escape') { setText(shown); }
+        }} />
+      {typed && (
+        <div className={'date-text-hint' + (parsed ? '' : ' bad')}>
+          {parsed
+            ? `${formatDay(parsed, 'roc')}（西元 ${parsed.replace(/-/g, '/')}）· Enter 確定`
+            : roc ? '看不懂這個日期。民國請輸入 7 位數字，例如 0300903 或 1151123' : '看不懂這個日期。西元請輸入 8 位數字，例如 20261123'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DateEditor({ value, prop, dbId, anchor, onChange, onClose }: {
   value?: string; prop?: Property; dbId?: string; anchor: Anchor; onChange: (v: string | null) => void; onClose: () => void;
 }) {
@@ -221,12 +263,23 @@ export function DateEditor({ value, prop, dbId, anchor, onChange, onClose }: {
   const s0 = val ? datePart(val.start) : '';
   const e0 = val?.end ? datePart(val.end) : s0;
 
+  // bare numbers typed into the box are 民國 years when this column (or the workspace) shows 民國
+  const roc = prop?.dateFormat === 'roc' || prop?.dateFormat === 'roc-slash'
+    || (isRocEra() && (!prop?.dateFormat || ['full', 'short', 'relative'].includes(prop.dateFormat)));
   const field = (which: 'start' | 'end') => {
     const v = which === 'start' ? val?.start : val?.end;
     return (
       <div className={'date-field' + (editing === which && withEnd ? ' active' : '')} onClick={() => setEditing(which)}>
-        <input className="input sm" type="date" value={v ? datePart(v) : ''}
-          onChange={(e) => { if (!e.target.value) return; setEditing(which); if (which === 'start') pickDay(e.target.value); else { const t = val?.end ? timePart(val.end) : ''; commit({ start: val?.start || point(e.target.value, ''), end: point(e.target.value, t) }); } }} />
+        <DateTextInput value={v ? datePart(v) : ''} roc={roc} autoFocus={which === 'start'}
+          onFocus={() => setEditing(which)}
+          onDone={() => onClose()}
+          onCommit={(day) => {
+            setEditing(which);
+            const d = toDate(day);
+            setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+            if (which === 'start') pickDay(day);
+            else { const t = val?.end ? timePart(val.end) : ''; commit({ start: val?.start || point(day, ''), end: point(day, t) }); }
+          }} />
         {withTime && (
           <input className="input sm time" type="time" step={300} value={v ? timePart(v) : ''} onChange={(e) => setTimeOf(which, e.target.value)} />
         )}

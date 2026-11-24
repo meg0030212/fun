@@ -129,3 +129,57 @@ export function moveDate(d: DateVal, newStart: string): DateVal {
   const e = new Date(toDate(d.end).getTime() + shift);
   return { start: ns, end: toLocalIso(e, hasTime(d.end) || hasTime(ns)) };
 }
+
+/* ---------------- typed date input ---------------- */
+
+function validDay(y: number, m: number, d: number): string | null {
+  if (y < 1 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const x = new Date(y, m - 1, d);
+  x.setFullYear(y); // keep years < 100 as-is
+  if (x.getFullYear() !== y || x.getMonth() !== m - 1 || x.getDate() !== d) return null;
+  return `${String(y).padStart(4, '0')}-${pad(m)}-${pad(d)}`;
+}
+
+/**
+ * Read a date typed by hand. With roc=true bare numbers are 民國 years:
+ *   "0300903" / "300903" / "30/9/3" / "民國30年9月3日" → 1941-09-03
+ * With roc=false bare numbers are 西元: "20261123" / "2026/11/23" / "2026年11月23日".
+ * Explicit forms always work in both modes (4-digit year = 西元, "民國…" = 民國).
+ */
+export function parseTypedDate(text: string, roc: boolean): string | null {
+  const s = text.replace(/\s+/g, '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/[／．－]/g, '/');
+  if (!s) return null;
+  let m = /^(?:中華)?民國(\d{1,3})年(\d{1,2})月(\d{1,2})日?$/.exec(s);
+  if (m) return validDay(+m[1] + 1911, +m[2], +m[3]);
+  m = /^(?:中華)?民國(\d{1,3})[/.-](\d{1,2})[/.-](\d{1,2})$/.exec(s);
+  if (m) return validDay(+m[1] + 1911, +m[2], +m[3]);
+  m = /^(?:西元)?(\d{4})年(\d{1,2})月(\d{1,2})日?$/.exec(s);
+  if (m) return validDay(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,3})年(\d{1,2})月(\d{1,2})日?$/.exec(s);
+  if (m) return validDay(+m[1] + 1911, +m[2], +m[3]);
+  m = /^(\d{1,4})[/.-](\d{1,2})[/.-](\d{1,2})$/.exec(s);
+  if (m) {
+    if (m[1].length === 4) return validDay(+m[1], +m[2], +m[3]);
+    return roc ? validDay(+m[1] + 1911, +m[2], +m[3]) : null;
+  }
+  if (/^\d+$/.test(s)) {
+    if (roc) {
+      if (s.length === 8 && /^(19|20)/.test(s)) return validDay(+s.slice(0, 4), +s.slice(4, 6), +s.slice(6, 8));
+      if (s.length >= 5 && s.length <= 7) {
+        const y = +s.slice(0, s.length - 4);
+        return validDay(y + 1911, +s.slice(-4, -2), +s.slice(-2));
+      }
+      return null;
+    }
+    if (s.length === 8) return validDay(+s.slice(0, 4), +s.slice(4, 6), +s.slice(6, 8));
+    return null;
+  }
+  return null;
+}
+
+/** how a stored day is shown inside the typing box */
+export function typedDateText(day: string, roc: boolean): string {
+  const [y, m, d] = day.split('-').map(Number);
+  if (roc && y > 1911) return `${String(y - 1911).padStart(3, '0')}/${pad(m)}/${pad(d)}`;
+  return `${y}/${pad(m)}/${pad(d)}`;
+}

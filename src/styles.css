@@ -615,6 +615,11 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .date-field.active { box-shadow: 0 0 0 2px var(--blue-soft); }
 .date-field .input { flex: 1; min-width: 0; }
 .date-field .input.time { flex: 0 0 118px; }
+.date-text { flex: 1; min-width: 0; position: relative; }
+.date-text .input { width: 100%; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.date-text .input.invalid { border-color: var(--red); box-shadow: 0 0 0 2px rgba(235, 87, 87, .15); }
+.date-text-hint { font-size: 11px; color: var(--c-green); margin-top: 2px; line-height: 1.4; }
+.date-text-hint.bad { color: var(--red); }
 .date-arrow { text-align: center; color: var(--text-3); font-size: 12px; line-height: 1; }
 .mini-day.range { background: var(--blue-soft); border-radius: 0; }
 .date-toggles { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; }
