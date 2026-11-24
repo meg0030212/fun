@@ -218,7 +218,29 @@ export function processRows(rows: Page[], db: Database, view: View, search: stri
 }
 
 /** default props for a new row given the view's filters */
-export function defaultsFromFilters(db: Database, view: View): Record<string, any> {
+/** rows that pass every filter (AND) */
+export function filterRows(rows: Page[], db: Database, filters: Filter[]): Page[] {
+  let out = rows;
+  filters.forEach((f) => {
+    const prop = db.properties.find((p) => p.id === f.propId);
+    if (prop) out = out.filter((r) => matchFilter(r, f, prop));
+  });
+  return out;
+}
+
+/** short human description of filters, e.g. "類別 是 工作" */
+export function describeFilters(db: Database, filters: Filter[]): string {
+  return filters.map((f) => {
+    const p = db.properties.find((x) => x.id === f.propId);
+    if (!p) return '';
+    const op = opsFor(p.type).find((o) => o.op === f.op);
+    let val = f.value ?? '';
+    if ((p.type === 'select' || p.type === 'status' || p.type === 'multi_select') && f.value) val = p.options?.find((o) => o.id === f.value)?.name || '';
+    return `${p.name} ${op?.label || ''}${op?.noValue ? '' : ' ' + val}`.trim();
+  }).filter(Boolean).join('、');
+}
+
+export function defaultsFromFilters(db: Database, view: Pick<View, 'filters'>): Record<string, any> {
   const out: Record<string, any> = {};
   view.filters.forEach((f) => {
     const prop = db.properties.find((p) => p.id === f.propId);
