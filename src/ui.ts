@@ -9,6 +9,7 @@ export interface UIState {
   trash: boolean;
   templates: boolean;
   importer: boolean;
+  formulaEdit: { dbId: string; propId: string; rowId?: string } | null;
   comments: boolean;
   toast: string | null;
   confirm: { message: string; action: string; resolve: (ok: boolean) => void } | null;
@@ -26,7 +27,7 @@ export interface PasswordRequest {
   resolve: (pw: string | null) => void;
 }
 
-let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, importer: false, comments: false, toast: null, confirm: null, password: null };
+let ui: UIState = { route: parseHash(), peek: null, search: false, settings: false, trash: false, templates: false, importer: false, formulaEdit: null, comments: false, toast: null, confirm: null, password: null };
 const ls = new Set<() => void>();
 
 function parseHash(): string {

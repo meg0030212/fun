@@ -8,6 +8,7 @@ import { CommentsPanel, ConfirmDialog, Home, PeekModal, SearchModal, SettingsMod
 import { FormatToolbar } from './components/FormatToolbar';
 import { PasswordDialog } from './components/SyncPanel';
 import { ImportModal } from './components/ImportModal';
+import { FormulaEditorHost } from './components/FormulaEditor';
 
 function useTheme() {
   const theme = useStore((s) => s.settings.theme);
@@ -101,6 +102,7 @@ export default function App() {
       {settings && <SettingsModal />}
       {templates && <TemplatesModal />}
       {importer && <ImportModal />}
+      <FormulaEditorHost />
       <FormatToolbar />
       <ConfirmDialog />
       <PasswordDialog />

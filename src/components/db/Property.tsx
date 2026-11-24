@@ -4,9 +4,10 @@ import { setRowProp, patchPage, updateDb, updateView, makeProp } from '../../sto
 import { COLORS, COLOR_NAMES, formatDateTime, safeUrl, uid } from '../../utils';
 import { DateVal, datePart, formatDateValue, formatTime, hasTime, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Popover, MenuItem, MenuSep, MenuHeader, Anchor, Toggle } from '../Popover';
-import { askConfirm } from '../../ui';
+import { askConfirm, setUI } from '../../ui';
 import { Icon } from '../Icons';
-import { formatNumber, getValue, PROP_TYPES, propTypeLabel } from './dbutils';
+import { displayText, formatNumber, getValue, PROP_TYPES, propTypeLabel } from './dbutils';
+import { formulaValue } from '../../formula';
 
 export function PropIcon({ type, size = 14 }: { type: PropType; size?: number }) {
   const m: Record<PropType, React.ReactNode> = {
@@ -14,7 +15,7 @@ export function PropIcon({ type, size = 14 }: { type: PropType; size?: number })
     select: <Icon.select size={size} />, multi_select: <Icon.multi size={size} />, status: <Icon.status size={size} />,
     date: <Icon.calendar size={size} />, checkbox: <Icon.checkbox size={size} />, url: <Icon.link size={size} />,
     email: <Icon.at size={size} />, phone: <Icon.phone size={size} />, created_time: <Icon.clock size={size} />,
-    last_edited_time: <Icon.clock size={size} />,
+    last_edited_time: <Icon.clock size={size} />, formula: <span style={{ fontSize: size * 0.95, fontWeight: 600, lineHeight: 1, fontFamily: 'Georgia, serif' }}>Σ</span>,
   };
   return <span className="prop-icon">{m[type]}</span>;
 }
@@ -389,6 +390,18 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
       );
     case 'created_time': case 'last_edited_time':
       return <span className="cell-text muted">{formatDateTime(v)}</span>;
+    case 'formula': {
+      const r = formulaValue(row, prop);
+      const open = () => setUI({ formulaEdit: { dbId: db.id, propId: prop.id, rowId: row.id } });
+      if (!prop.formula?.trim()) {
+        return ro ? null : <span className="cell-text placeholder clickable" onClick={open}>設定公式…</span>;
+      }
+      if (!r.ok) return <span className="cell-text formula-error" title={r.error} onClick={ro ? undefined : open}>⚠ 錯誤</span>;
+      if (typeof r.value === 'boolean') return <span className={'checkbox readonly' + (r.value ? ' on' : '')}>{r.value && <Icon.check size={12} />}</span>;
+      const text = displayText(row, prop);
+      if (ro && !text) return null;
+      return <span className={'cell-text formula-val' + (typeof r.value === 'number' ? ' num' : '')} title={text}>{text}</span>;
+    }
   }
   return null;
 }
@@ -428,6 +441,7 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
       if ((t === 'select' || t === 'multi_select' || t === 'status') && !p.options) p.options = makeProp(t, '').options;
     });
     setTypeMenu(null);
+    if (t === 'formula') { onClose(); setUI({ formulaEdit: { dbId: db.id, propId: prop.id } }); }
   };
 
   return (
@@ -441,7 +455,11 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
           <MenuItem icon={<PropIcon type={prop.type} />} label="類型" right={<>{propTypeLabel(prop.type)} <Icon.chevronRight size={12} /></>}
             onClick={(e) => setTypeMenu(e.currentTarget as HTMLElement)} />
         )}
-        {prop.type === 'number' && (
+        {prop.type === 'formula' && (
+          <MenuItem icon={<PropIcon type="formula" />} label="編輯公式" right={<Icon.chevronRight size={12} />}
+            onClick={() => { saveName(); onClose(); setUI({ formulaEdit: { dbId: db.id, propId: prop.id } }); }} />
+        )}
+        {(prop.type === 'number' || prop.type === 'formula') && (
           <div className="menu-row">
             <span className="muted small">數字格式</span>
             <select className="select-sm" value={prop.numberFormat || 'number'} onChange={(e) => updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.numberFormat = e.target.value as any; })}>
@@ -548,6 +566,7 @@ export function AddPropertyMenu({ db, anchor, onClose, onAdded }: { db: Database
             updateDb(db.id, (d) => { d.properties.push(p); });
             onAdded?.(p.id);
             onClose();
+            if (t.type === 'formula') setUI({ formulaEdit: { dbId: db.id, propId: p.id } });
           }} />
         ))}
       </div>
