@@ -867,6 +867,14 @@ body.filling, body.filling * { cursor: ns-resize !important; user-select: none; 
 .tbl-add-col { cursor: e-resize; }
 .pull-count { writing-mode: vertical-rl; font-size: 11px; font-weight: 600; }
 
+.pl-mslot { display: flex; gap: 4px; align-items: flex-start; border-top: 1px dashed var(--border); padding-top: 1px; min-height: 22px; }
+.pl-mslot:first-of-type { border-top: 0; }
+.pl-mslot:focus-within { background: var(--bg-hover); border-radius: 3px; }
+.pl-mslot-label { font-size: 10px; color: var(--w-accent); font-weight: 600; white-space: nowrap; padding-top: 3px; min-width: 22px; }
+.pl-mslot-body { flex: 1; min-width: 0; }
+.pl-month.slotted .pl-month-cell { min-height: 110px; }
+.pl-month.slotted .pl-cell-text { min-height: 18px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }

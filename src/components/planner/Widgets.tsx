@@ -227,22 +227,60 @@ export function MonthWidget(p: WidgetProps) {
   const events = useSourceEvents(p.page, p.w, monthDays);
   const target = targetSource(p.page, p.w);
   const today = todayIso();
+  // optional split of every day into slots such as 上午／下午／晚上
+  const daySlots = p.w.opts?.slotMode === 'custom' ? (p.w.opts.slots || []) : [];
+  const ns = daySlots.length;
+  const slotOf = (ev: Ev, iso: string): string | null => {
+    if (!ns || !hasTime(ev.d.start) || datePart(ev.d.start) !== iso) return null;
+    const [h, m] = timePart(ev.d.start).split(':').map(Number);
+    const t = h * 60 + m;
+    return daySlots.find((s) => { const r = slotRange(s.label); return r && t >= r[0] && t < r[1]; })?.id ?? null;
+  };
+  const setNote = (key: string, v: string) => set((d) => ({ ...d, days: { ...(d.days || {}), [key]: v } }), 'typing');
   return (
-    <div className="pl-month" data-gwrap="1" onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+    <div className={'pl-month' + (ns ? ' slotted' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
       {Array.from({ length: 7 }, (_, i) => <div key={i} className="pl-month-dow">{WD[(i + ws) % 7]}</div>)}
-      {cells.map((iso, i) => iso ? (
-        <div key={iso} className={'pl-month-cell' + (iso === today ? ' today' : '') + ([0, 6].includes(toDate(iso).getDay()) ? ' weekend' : '')} data-gr={Math.floor(i / 7)} data-gc={i % 7}>
-          <div className="pl-month-num">
-            <span>{toDate(iso).getDate()}</span>
-            {target && !p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, iso)}><Icon.plus size={11} /></button>}
+      {cells.map((iso, i) => {
+        if (!iso) return <div key={'x' + i} className="pl-month-cell empty" />;
+        const week = Math.floor(i / 7), col = i % 7;
+        const dayEvents = events.filter((e) => daysCovered(e.d).includes(iso));
+        const loose = dayEvents.filter((e) => !slotOf(e, iso));
+        return (
+          <div key={iso} className={'pl-month-cell' + (iso === today ? ' today' : '') + ([0, 6].includes(toDate(iso).getDay()) ? ' weekend' : '')}
+            {...(ns ? {} : { 'data-gr': week, 'data-gc': col })}>
+            <div className="pl-month-num">
+              <span>{toDate(iso).getDate()}</span>
+              {target && !p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, iso)}><Icon.plus size={11} /></button>}
+            </div>
+            {loose.map((e) => <EventChip key={e.row.id} ev={e} day={iso} />)}
+            {ns ? daySlots.map((s, si) => (
+              <div key={s.id} className="pl-mslot" data-gr={week * ns + si} data-gc={col}>
+                <span className="pl-mslot-label">{s.label}</span>
+                <div className="pl-mslot-body">
+                  {dayEvents.filter((e) => slotOf(e, iso) === s.id).map((e) => <EventChip key={e.row.id} ev={e} day={iso} />)}
+                  <AutoText value={data.days?.[`${iso}|${s.id}`] || ''} readOnly={p.readOnly} className="pl-cell-text"
+                    onChange={(v) => setNote(`${iso}|${s.id}`, v)} />
+                </div>
+              </div>
+            )) : (
+              <AutoText value={data.days?.[iso] || ''} readOnly={p.readOnly} className="pl-cell-text" onChange={(v) => setNote(iso, v)} />
+            )}
           </div>
-          {events.filter((e) => daysCovered(e.d).includes(iso)).map((e) => <EventChip key={e.row.id} ev={e} day={iso} />)}
-          <AutoText value={data.days?.[iso] || ''} readOnly={p.readOnly} className="pl-cell-text"
-            onChange={(v) => set((d) => ({ ...d, days: { ...(d.days || {}), [iso]: v } }), 'typing')} />
-        </div>
-      ) : <div key={'x' + i} className="pl-month-cell empty" />)}
+        );
+      })}
     </div>
   );
+}
+
+/** time range (minutes) a slot name usually means, used to place timed events */
+function slotRange(label: string): [number, number] | null {
+  const l = label.toLowerCase();
+  if (/清晨|早晨|早上|上午|morning|\bam\b/.test(l)) return [0, 12 * 60];
+  if (/中午|午餐|noon|lunch/.test(l)) return [11 * 60, 14 * 60];
+  if (/下午|afternoon|\bpm\b/.test(l)) return [12 * 60, 18 * 60];
+  if (/傍晚|dusk/.test(l)) return [17 * 60, 19 * 60];
+  if (/晚上|夜|evening|night/.test(l)) return [18 * 60, 24 * 60];
+  return null;
 }
 
 /* ---------------- time slots ---------------- */
