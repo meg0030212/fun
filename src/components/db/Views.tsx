@@ -9,7 +9,8 @@ import { Icon } from '../Icons';
 import { MenuItem, Popover, MenuSep } from '../Popover';
 import { PageIcon, coverStyle } from '../EmojiPicker';
 import { AddPropertyMenu, Chip, PropIcon, PropValue, PropertyMenu, StatusChip } from './Property';
-import { CALCS, calculate, getValue, isEmpty, visibleProps } from './dbutils';
+import { CALCS, calculate, displayText, getValue, isEmpty, visibleProps } from './dbutils';
+import { applyFill, canFill, seriesValue } from './fill';
 
 interface VP {
   db: Database;
@@ -49,6 +50,71 @@ export function TableView({ db, view, rows, newRow }: VP) {
   const [dragRow, setDragRow] = useState<string | null>(null);
   const [dropRow, setDropRow] = useState<{ id: string; after: boolean } | null>(null);
   const [dragCol, setDragCol] = useState<string | null>(null);
+  const [active, setActive] = useState<{ ri: number; ci: number } | null>(null);
+  const [fill, setFill] = useState<{ ri: number; ci: number; to: number } | null>(null);
+  const tblRef = useRef<HTMLDivElement>(null);
+
+  /* Excel-style fill handle: drag the corner of the selected cell up or down */
+  const startFill = (e: React.MouseEvent, ri: number, ci: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const scroller = tblRef.current?.closest('.page-scroller') as HTMLElement | null;
+    let cur = { ri, ci, to: ri };
+    const rowH = 34;
+    const targetOf = (y: number) => {
+      const els = Array.from(tblRef.current?.querySelectorAll<HTMLElement>('.tbl-row[data-ri]') || []);
+      if (!els.length) return ri;
+      for (let i = 0; i < els.length; i++) {
+        const r = els[i].getBoundingClientRect();
+        if (y < r.bottom) return Math.max(0, i);
+      }
+      const last = els[els.length - 1].getBoundingClientRect();
+      return els.length - 1 + Math.min(200, Math.ceil((y - last.bottom) / rowH));
+    };
+    const move = (ev: MouseEvent) => {
+      cur = { ri, ci, to: targetOf(ev.clientY) };
+      setFill(cur);
+      if (scroller) {
+        const r = scroller.getBoundingClientRect();
+        if (ev.clientY > r.bottom - 40) scroller.scrollBy(0, 16);
+        if (ev.clientY < r.top + 40) scroller.scrollBy(0, -16);
+      }
+    };
+    const up = (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.classList.remove('filling');
+      setFill(null);
+      // select the source cell (not its text box) so Ctrl+Z undoes the whole fill at once
+      tblRef.current?.querySelector<HTMLElement>(`[data-gr="${ri}"][data-gc="${ci}"]`)?.focus({ preventScroll: true });
+      const prop = props[ci];
+      const src = rows[ri];
+      if (!prop || !src || cur.to === ri) return;
+      const copyOnly = ev.ctrlKey || ev.metaKey || ev.altKey;
+      if (cur.to > ri) {
+        const targets = rows.slice(ri + 1, Math.min(rows.length, cur.to + 1));
+        const extra = Math.max(0, cur.to - (rows.length - 1));
+        applyFill(db, prop, src, targets, 1, extra, copyOnly, view);
+      } else {
+        const targets = rows.slice(cur.to, ri).reverse();
+        applyFill(db, prop, src, targets, -1, 0, copyOnly, view);
+      }
+    };
+    document.body.classList.add('filling');
+    setFill(cur);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
+  const inFill = (ri: number, ci: number) => !!fill && fill.ci === ci && fill.to !== fill.ri && (fill.to > fill.ri ? ri > fill.ri && ri <= fill.to : ri < fill.ri && ri >= fill.to);
+  const fillPreview = (k: number) => {
+    if (!fill) return '';
+    const prop = props[fill.ci];
+    const src = rows[fill.ri];
+    const v = seriesValue(prop, prop.type === 'title' ? src.title : src.props?.[prop.id], k, false);
+    const fake = { ...src, title: prop.type === 'title' ? v : src.title, props: { ...(src.props || {}), [prop.id]: v } } as Page;
+    return displayText(fake, prop);
+  };
+  const extraRows = fill && fill.to > rows.length - 1 ? fill.to - (rows.length - 1) : 0;
   const width = (p: Property) => liveWidths[p.id] ?? view.widths[p.id] ?? (p.type === 'title' ? 280 : 180);
 
   const startResize = (e: React.MouseEvent, p: Property) => {
@@ -72,7 +138,12 @@ export function TableView({ db, view, rows, newRow }: VP) {
 
   return (
     <div className="tbl-scroll">
-      <div className="tbl" style={{ minWidth: total + 40 }} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+      <div className="tbl" ref={tblRef} style={{ minWidth: total + 40 }} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}
+        onFocusCapture={(e) => {
+          const c = (e.target as HTMLElement).closest<HTMLElement>('[data-gc]');
+          if (c) setActive({ ri: Number(c.dataset.gr), ci: Number(c.dataset.gc) });
+        }}
+        onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActive(null); }}>
         <div className="tbl-row tbl-head">
           <div className="tbl-gutter" />
           {props.map((p) => (
@@ -99,7 +170,7 @@ export function TableView({ db, view, rows, newRow }: VP) {
           <div className="th th-add" onClick={(e) => setAddProp(e.currentTarget as HTMLElement)}><Icon.plus size={14} /></div>
         </div>
         {rows.map((r, ri) => (
-          <div key={r.id} className={'tbl-row' + (dragRow === r.id ? ' dragging' : '') + (dropRow?.id === r.id ? (dropRow.after ? ' drop-after' : ' drop-before') : '')}
+          <div key={r.id} data-ri={ri} className={'tbl-row' + (dragRow === r.id ? ' dragging' : '') + (dropRow?.id === r.id ? (dropRow.after ? ' drop-after' : ' drop-before') : '')}
             onDragOver={(e) => {
               if (!dragRow) return;
               e.preventDefault();
@@ -121,8 +192,24 @@ export function TableView({ db, view, rows, newRow }: VP) {
                 onClick={(e) => setRowMenu({ row: r, anchor: e.currentTarget as HTMLElement })}><Icon.drag size={12} /></span>
             </div>
             {props.map((p, ci) => (
-              <div key={p.id} className={'td td-' + p.type} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
+              <div key={p.id} className={'td td-' + p.type + (inFill(ri, ci) ? ' fill-preview' : '') + (fill && fill.ri === ri && fill.ci === ci ? ' fill-source' : '')} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
                 <PropValue db={db} prop={p} row={r} mode="table" onOpen={p.type === 'title' ? () => openPeek(r.id) : undefined} />
+                {inFill(ri, ci) && <span className="fill-ghost-text">{fillPreview(fill!.to > fill!.ri ? ri - fill!.ri : ri - fill!.ri)}</span>}
+                {((active && active.ri === ri && active.ci === ci) || (fill && fill.ri === ri && fill.ci === ci)) && canFill(p) && (
+                  <span className="fill-handle" title="往上或往下拖曳以填入（按住 Ctrl 只複製不遞增）" onMouseDown={(e) => startFill(e, ri, ci)} />
+                )}
+              </div>
+            ))}
+            <div className="td td-fill" />
+          </div>
+        ))}
+        {extraRows > 0 && Array.from({ length: Math.min(extraRows, 200) }, (_, i) => (
+          <div key={'ghost' + i} className="tbl-row ghost">
+            <div className="tbl-gutter" />
+            {props.map((p, ci) => (
+              <div key={p.id} className={'td' + (ci === fill!.ci ? ' fill-preview' : '')} style={{ width: width(p) }}>
+                {ci === fill!.ci && <span className="fill-ghost-text">{fillPreview(rows.length - fill!.ri + i)}</span>}
+                {i === 0 && ci === (fill!.ci === 0 ? 1 : 0) && <span className="fill-new-label">＋ 放開後新增 {extraRows} 列</span>}
               </div>
             ))}
             <div className="td td-fill" />
