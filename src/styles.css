@@ -1209,3 +1209,29 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .pl-tag-wrap:hover .pl-tag-edit, .pl-tag-edit:focus-visible { opacity: 1; }
 .pl-tag-edit:hover { background: var(--bg-hover-strong); color: var(--text); }
 @media (hover: none) { .pl-tag-edit { opacity: 1; } }
+
+/* database calendar: linked databases, slots, quick tags */
+.cal-sources { margin: -2px 0 8px; }
+.calendar .pl-tagbar { --w-accent: var(--c-blue); }
+.cal-item { position: relative; }
+.cal-item.colored { box-shadow: none; border-left: 3px solid transparent; }
+.cal-item.colored:hover { filter: brightness(.96); }
+.cal-item:hover .pl-event-x { display: block; }
+.wk-event.colored { color: var(--text); border-left: 3px solid transparent; }
+.wk-event.colored .wk-ev-time { color: var(--text-2); }
+.cal-slots { display: flex; flex-direction: column; }
+.cal-slot { position: relative; display: flex; gap: 4px; align-items: flex-start; border-top: 1px dashed var(--border); padding: 2px 0; min-height: 26px; }
+.cal-slot:first-child { border-top: 0; }
+.cal-slot.over { background: var(--blue-soft); }
+.cal-slot-label { font-size: 10.5px; color: var(--c-blue); font-weight: 600; white-space: nowrap; padding-top: 3px; min-width: 24px; }
+.cal-slot-body { flex: 1; min-width: 0; }
+.cal-slot-body .cal-item { margin-bottom: 2px; padding: 1px 5px; }
+.cal-slot-add { position: absolute; right: 0; top: 2px; opacity: 0; border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 1px; border-radius: 3px; display: inline-flex; }
+.cal-slot:hover .cal-slot-add { opacity: 1; }
+.cal-slot:has(.cal-item:hover) .cal-slot-add { display: none; }
+.cal-slot-add:hover { background: var(--bg-hover-strong); color: var(--text); }
+.cal-grid.slotted .cal-day { min-height: 0; }
+.cal-grid.brushing .cal-day, .cal-grid.brushing .cal-item, .calendar.week.brushing .wk-col, .calendar.week.brushing .wk-allday-cell { cursor: copy; }
+.cal-grid.brushing .cal-slot:hover, .cal-grid.brushing:not(.slotted) .cal-day:hover { background: var(--blue-soft); }
+@media (hover: none) { .cal-slot-add, .cal-add { opacity: .6; } }
+@media print { .cal-sources, .calendar .pl-tagbar, .cal-add, .cal-slot-add { display: none !important; } }

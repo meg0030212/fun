@@ -10,7 +10,8 @@ import { defaultsFromFilters, opsFor, processRows } from './dbutils';
 import { PropIcon, Chip } from './Property';
 import { FilterRows } from './FilterEditor';
 import { ImeInput } from '../../ime';
-import { TableView, BoardView, ListView, GalleryView, CalendarView } from './Views';
+import { TableView, BoardView, ListView, GalleryView } from './Views';
+import { CalendarView } from './CalendarView';
 
 export const VIEW_TYPES: { type: ViewType; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
   { type: 'table', label: '表格', icon: Icon.table },
