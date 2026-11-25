@@ -208,8 +208,32 @@ function SimpleTable({ block, update, readOnly }: Props) {
     next[r][c] = html;
     update({ rows: next });
   };
-  const addRow = () => update({ rows: [...rows, Array(cols).fill('')] });
-  const addCol = () => update({ rows: rows.map((r) => [...r, '']) });
+  const addRow = (n = 1) => update({ rows: [...rows, ...Array.from({ length: n }, () => Array(cols).fill(''))] });
+  const addCol = (n = 1) => update({ rows: rows.map((r) => [...r, ...Array(n).fill('')]) });
+  const [pending, setPending] = useState<{ axis: 'row' | 'col'; n: number } | null>(null);
+  /** click adds one; press and drag down/right adds as many as you pull */
+  const dragAdd = (e: React.MouseEvent, axis: 'row' | 'col') => {
+    e.preventDefault();
+    const start = axis === 'row' ? e.clientY : e.clientX;
+    const step = axis === 'row' ? 34 : 120;
+    let n = 1;
+    let moved = false;
+    setPending({ axis, n });
+    const move = (ev: MouseEvent) => {
+      const d = (axis === 'row' ? ev.clientY : ev.clientX) - start;
+      if (Math.abs(d) > 4) moved = true;
+      n = Math.max(1, Math.min(100, 1 + Math.floor(Math.max(0, d) / step)));
+      setPending({ axis, n });
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      setPending(null);
+      if (axis === 'row') addRow(moved ? n : 1); else addCol(moved ? n : 1);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
   const delRow = (i: number) => rows.length > 1 && update({ rows: rows.filter((_, k) => k !== i) });
   const delCol = (i: number) => cols > 1 && update({ rows: rows.map((r) => r.filter((_, k) => k !== i)) });
   return (
@@ -239,11 +263,17 @@ function SimpleTable({ block, update, readOnly }: Props) {
             ))}
           </tbody>
         </table>
-        {!readOnly && <button className="tbl-add-col" onClick={addCol} title="新增欄"><Icon.plus size={14} /></button>}
+        {!readOnly && (
+          <button className={'tbl-add-col' + (pending?.axis === 'col' ? ' pulling' : '')} onMouseDown={(e) => dragAdd(e, 'col')} title="點擊新增一欄，按住往右拖可一次新增多欄">
+            {pending?.axis === 'col' ? <span className="pull-count">+{pending.n}</span> : <Icon.plus size={14} />}
+          </button>
+        )}
       </div>
       {!readOnly && (
         <div className="tbl-foot-row">
-          <button className="tbl-add-row" onClick={addRow}><Icon.plus size={14} /> 新增列</button>
+          <button className={'tbl-add-row' + (pending?.axis === 'row' ? ' pulling' : '')} onMouseDown={(e) => dragAdd(e, 'row')} title="點擊新增一列，按住往下拖可一次新增多列">
+            <Icon.plus size={14} /> {pending?.axis === 'row' ? `放開以新增 ${pending.n} 列` : '新增列（可往下拖）'}
+          </button>
           <label className="muted small tbl-header-toggle">
             <input type="checkbox" checked={!!block.headerRow} onChange={(e) => update({ headerRow: e.target.checked })} /> 標題列
           </label>
