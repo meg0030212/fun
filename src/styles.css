@@ -1204,3 +1204,8 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .pl-tag-swatches .pl-swatch { border: 1px solid var(--border-strong); }
 .pl-tag-confirm { margin: 4px 0 6px 28px; padding: 8px; border-radius: 6px; background: var(--bg-hover); display: flex; flex-direction: column; gap: 6px; }
 .pl-tag-confirm .pl-edit-row { flex-wrap: wrap; }
+.pl-tag-wrap { position: relative; display: inline-flex; align-items: center; }
+.pl-tag-edit { border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 2px; margin-left: 1px; border-radius: 3px; display: inline-flex; opacity: .35; }
+.pl-tag-wrap:hover .pl-tag-edit, .pl-tag-edit:focus-visible { opacity: 1; }
+.pl-tag-edit:hover { background: var(--bg-hover-strong); color: var(--text); }
+@media (hover: none) { .pl-tag-edit { opacity: 1; } }
