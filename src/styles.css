@@ -1347,3 +1347,26 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 body.pl-resizing-x, body.pl-resizing-x * { cursor: ew-resize !important; user-select: none; }
 body.pl-resizing-xy, body.pl-resizing-xy * { cursor: nwse-resize !important; user-select: none; }
 @media (max-width: 700px) { .pl-resize-x, .pl-resize-xy { display: none; } }
+
+/* month block: a week row is never shorter than what is written in it (no spilling into the next week);
+   spare height is still shared out, and a block with a fixed height scrolls instead */
+.pl-month-cell, .pl-month.slotted .pl-month-cell { min-height: var(--cell-min, 84px); }
+.pl-mslots { min-height: auto; }
+.pl-mslot { flex: 1 0 auto; min-height: 24px; }
+.pl-month { flex: 1 0 auto; }
+/* long names wrap onto a second line instead of being cut off */
+.pl-month .pl-event { align-items: flex-start; }
+.pl-month .pl-event-title { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+.pl-tagbar, .cal-toolbar { flex-shrink: 0; }
+/* entries never stick out of their day */
+.pl-month-cell { container-type: inline-size; }
+.pl-month .pl-event { max-width: 100%; min-width: 0; overflow: hidden; }
+.pl-mslot-body { overflow: hidden; }
+/* narrow days: slot name goes above its entries so they keep the full width */
+@container (max-width: 96px) {
+  .pl-mslot { flex-direction: column; gap: 1px; }
+  .pl-mslot-label { padding-top: 1px; min-width: 0; }
+  .pl-mslot-body { width: 100%; }
+  .pl-month .pl-event { padding: 1px 4px; }
+}
+@container (max-width: 96px) { .pl-month .pl-event-title { -webkit-line-clamp: 3; } }
