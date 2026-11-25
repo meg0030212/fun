@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isImeKey } from '../ime';
 import type { State } from '../types';
 import { createPage, getState, isTrashed, patchPage, replaceState, updateSettings, useStore } from '../store';
 import { askConfirm, askPassword, navigate, openPeek, setUI, toast, useUI } from '../ui';
@@ -68,7 +69,7 @@ export function SearchModal() {
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setIdx((i) => Math.min(results.length - 1, i + 1)); }
             if (e.key === 'ArrowUp') { e.preventDefault(); setIdx((i) => Math.max(0, i - 1)); }
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            if (e.key === 'Enter' && !isImeKey(e)) {
               e.preventDefault();
               if (results[idx]) open(results[idx].page.id);
               else if (q.trim()) { const id = createPage({ title: q.trim() }); open(id); }
@@ -312,7 +313,7 @@ export function CommentsPanel({ pageId }: { pageId: string }) {
       <div className="cp-input">
         <span className="ws-avatar sm">{(user || '我').slice(0, 1)}</span>
         <textarea className="input" rows={2} placeholder="新增留言…" value={text} onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); add(); } }} />
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isImeKey(e)) { e.preventDefault(); add(); } }} />
         <button className="btn-primary sm" disabled={!text.trim()} onClick={add}>送出</button>
       </div>
     </aside>

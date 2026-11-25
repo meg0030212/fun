@@ -33,12 +33,15 @@ export const Editable = forwardRef<HTMLDivElement | null, Props>(function Editab
 ) {
   const ref = useRef<HTMLDivElement>(null);
   const last = useRef<string | null>(null);
+  // true while an input method (注音、拼音…) is composing: never touch the DOM then
+  const composing = useRef(false);
   useImperativeHandle(fwd, () => ref.current as HTMLDivElement);
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (last.current === html) return;
+    if (composing.current) return; // rewriting now would make the IME insert its text again
     const cur = plain ? el.textContent : el.innerHTML;
     if (cur === html) { last.current = html; return; }
     const focused = document.activeElement === el;
@@ -51,6 +54,8 @@ export const Editable = forwardRef<HTMLDivElement | null, Props>(function Editab
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     const el = ref.current!;
+    // save once, after the candidate is confirmed (see onCompositionEnd)
+    if (composing.current || (e.nativeEvent as InputEvent).isComposing) return;
     if (!plain && (el.innerHTML === '<br>' || el.innerHTML === '<div><br></div>')) el.innerHTML = '';
     const v = plain ? (el.textContent || '') : el.innerHTML;
     last.current = v;
@@ -76,6 +81,12 @@ export const Editable = forwardRef<HTMLDivElement | null, Props>(function Editab
       data-placeholder={placeholder}
       spellCheck={spellCheck}
       onInput={handleInput}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={(e) => {
+        composing.current = false;
+        // the browser has inserted the confirmed text by now: save it once
+        handleInput(e as unknown as React.FormEvent<HTMLDivElement>);
+      }}
       onKeyDown={(e) => onKeyDown?.(e, ref.current!)}
       onPaste={(e) => onPaste?.(e, ref.current!)}
       onClick={handleClick}

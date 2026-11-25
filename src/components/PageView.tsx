@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isImeKey } from '../ime';
 import type { Page } from '../types';
 import { deletePageForever, getState, isTrashed, newBlock, patchPage, restorePage, setBlocks, useStore } from '../store';
 import { askConfirm, navigate, setUI, useUI } from '../ui';
@@ -142,7 +143,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
           readOnly={readOnly}
           onChange={(t) => patchPage(page.id, { title: t.replace(/\n/g, '') }, 'typing')}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); focusFirstBlock(); }
+            if (e.key === 'Enter' && !isImeKey(e)) { e.preventDefault(); focusFirstBlock(); }
             if (e.key === 'ArrowDown') { e.preventDefault(); focusFirstBlock(); }
           }}
         />

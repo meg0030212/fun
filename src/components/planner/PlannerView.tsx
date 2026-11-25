@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isImeKey } from '../../ime';
 import type { Page, PlannerPeriod, PlannerWidget, WidgetType } from '../../types';
 import { askConfirm, setUI, toast } from '../../ui';
 import { COLORS, COLOR_NAMES, uid } from '../../utils';
@@ -247,7 +248,7 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
       <div className="pl-form">
         <label className="muted small" htmlFor="w-title">區塊名稱</label>
         <input id="w-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle}
-          onKeyDown={(e) => { if (e.key === 'Enter') { saveTitle(); onClose(); } }} />
+          onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) { saveTitle(); onClose(); } }} />
         <div className="muted small">顏色</div>
         <div className="pl-swatches">
           <button className={'pl-swatch auto' + (!w.color ? ' on' : '')} title="跟隨主題色" onClick={() => patch((x) => { x.color = undefined; })}>A</button>
@@ -286,7 +287,7 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
                 ))}
                 <div className="pl-edit-row">
                   <input className="input sm" placeholder="新增時段，例如：清晨、中午" value={newItem} onChange={(e) => setNewItem(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && newItem.trim() && !e.nativeEvent.isComposing) { patch((x) => { x.opts!.slots = [...(x.opts!.slots || []), { id: uid(), label: newItem.trim() }]; }); setNewItem(''); } }} />
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newItem.trim() && !isImeKey(e)) { patch((x) => { x.opts!.slots = [...(x.opts!.slots || []), { id: uid(), label: newItem.trim() }]; }); setNewItem(''); } }} />
                   <button className="btn-outline sm" disabled={!newItem.trim()} onClick={() => { patch((x) => { x.opts!.slots = [...(x.opts!.slots || []), { id: uid(), label: newItem.trim() }]; }); setNewItem(''); }}>新增</button>
                 </div>
               </div>
@@ -326,7 +327,7 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
             ))}
             <div className="pl-edit-row">
               <input className="input sm" placeholder="新增習慣" value={newItem} onChange={(e) => setNewItem(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && newItem.trim() && !e.nativeEvent.isComposing) { patch((x) => { x.opts!.habits = [...(x.opts!.habits || []), { id: uid(), name: newItem.trim() }]; }); setNewItem(''); } }} />
+                onKeyDown={(e) => { if (e.key === 'Enter' && newItem.trim() && !isImeKey(e)) { patch((x) => { x.opts!.habits = [...(x.opts!.habits || []), { id: uid(), name: newItem.trim() }]; }); setNewItem(''); } }} />
               <button className="btn-outline sm" disabled={!newItem.trim()} onClick={() => { patch((x) => { x.opts!.habits = [...(x.opts!.habits || []), { id: uid(), name: newItem.trim() }]; }); setNewItem(''); }}>新增</button>
             </div>
           </div>

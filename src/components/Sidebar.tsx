@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { isImeKey } from '../ime';
 import type { Page } from '../types';
 import {
   createPage, deletePageForever, duplicatePage, emptyTrash, getState, isTrashed, movePage, patchPage, restorePage, trashPage,
@@ -264,7 +265,7 @@ function RenamePopover({ page, anchor, onClose }: { page: Page; anchor: Anchor; 
       <div className="rename-row">
         <PageIcon icon={page.icon} size={18} />
         <input className="input" autoFocus value={v} onChange={(e) => setV(e.target.value)} onFocus={(e) => e.target.select()}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { patchPage(page.id, { title: v }); onClose(); } }} />
+          onKeyDown={(e) => { if (e.key === 'Enter' && !isImeKey(e)) { patchPage(page.id, { title: v }); onClose(); } }} />
       </div>
     </Popover>
   );

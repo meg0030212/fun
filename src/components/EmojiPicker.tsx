@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isImeKey } from '../ime';
 import { Popover, Anchor } from './Popover';
 
 const CATS: [string, string][] = [
@@ -51,7 +52,7 @@ export function EmojiPicker({ anchor, onSelect, onRemove, onClose }: {
       ) : (
         <div style={{ padding: 12 }}>
           <input className="input" placeholder="貼上圖片連結…" value={url} autoFocus onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && url) { onSelect(url); onClose(); } }} />
+            onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e)) && url) { onSelect(url); onClose(); } }} />
           <button className="btn-primary" style={{ marginTop: 8, width: '100%' }} onClick={() => { if (url) { onSelect(url); onClose(); } }}>提交</button>
         </div>
       )}
@@ -117,7 +118,7 @@ export function CoverPicker({ anchor, onSelect, onRemove, onClose, onUpload }: {
       {tab === 'link' && (
         <div style={{ padding: 12 }}>
           <input className="input" placeholder="貼上圖片連結…" autoFocus value={url} onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && url) { onSelect(url); onClose(); } }} />
+            onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e)) && url) { onSelect(url); onClose(); } }} />
           <button className="btn-primary" style={{ marginTop: 8, width: '100%' }} onClick={() => { if (url) { onSelect(url); onClose(); } }}>提交</button>
         </div>
       )}

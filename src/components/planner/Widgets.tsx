@@ -7,6 +7,7 @@ import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, ti
 import { addSource, slotsOf, updateEntry, updatePlanner } from '../../planner';
 import { defaultsFromFilters, filterRows } from '../db/dbutils';
 import { handleGridKey } from '../../gridNav';
+import { isImeKey, useImeValue } from '../../ime';
 import { Editable } from '../Editable';
 import { Icon } from '../Icons';
 import { PageIcon } from '../EmojiPicker';
@@ -36,21 +37,21 @@ export function AutoText({ value, onChange, placeholder, readOnly, className, on
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void; inputRef?: (el: HTMLTextAreaElement | null) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  const ime = useImeValue(value, onChange);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = '0px';
     el.style.height = el.scrollHeight + 'px';
-  }, [value]);
+  }, [ime.value]);
   return (
     <textarea
       ref={(el) => { ref.current = el; inputRef?.(el); }}
       className={'auto-text ' + (className || '')}
       rows={1}
-      value={value}
+      {...ime}
       placeholder={placeholder}
       readOnly={readOnly}
-      onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
     />
   );
@@ -187,7 +188,7 @@ export function ListWidget(p: WidgetProps) {
             inputRef={(el) => (refs.current[it.id] = el)}
             onChange={(v) => setItems((l) => l.map((x) => (x.id === it.id ? { ...x, text: v.replace(/\n/g, '') } : x)), 'typing')}
             onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return;
+              if (isImeKey(e)) return;
               if (e.key === 'Enter') { e.preventDefault(); addAfter(i); }
               if (e.key === 'Backspace' && !it.text) {
                 e.preventDefault();

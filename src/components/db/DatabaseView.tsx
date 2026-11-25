@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { isImeKey } from '../../ime';
 import type { Database, View, ViewType } from '../../types';
 import { addRow, isTrashed, makeProp, makeView, updateDb, updateView, useStore, getState } from '../../store';
 import { openPeek } from '../../ui';
@@ -8,6 +9,7 @@ import { Popover, MenuItem, MenuSep, MenuHeader, Toggle } from '../Popover';
 import { defaultsFromFilters, opsFor, processRows } from './dbutils';
 import { PropIcon, Chip } from './Property';
 import { FilterRows } from './FilterEditor';
+import { ImeInput } from '../../ime';
 import { TableView, BoardView, ListView, GalleryView, CalendarView } from './Views';
 
 export const VIEW_TYPES: { type: ViewType; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
@@ -47,8 +49,8 @@ export function DatabaseView({ dbId, inline }: { dbId: string; inline?: boolean 
     <div className={'db' + (inline ? ' inline' : ' full')} contentEditable={false} suppressContentEditableWarning>
       {inline && (
         <div className="db-title-row">
-          <input className="db-title" value={db.title} placeholder="未命名資料庫"
-            onChange={(e) => updateDb(db.id, (d) => { d.title = e.target.value; }, 'typing')} />
+          <ImeInput className="db-title" value={db.title} placeholder="未命名資料庫"
+            onValue={(v) => updateDb(db.id, (d) => { d.title = v; }, 'typing')} />
         </div>
       )}
       <div className="db-bar">
@@ -194,7 +196,7 @@ function ViewMenu({ db, viewId, anchor, onClose }: { db: Database; viewId: strin
   return (
     <Popover anchor={anchor} onClose={() => { save(); onClose(); }} width={240}>
       <div className="menu-search">
-        <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { save(); onClose(); } }} />
+        <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) { save(); onClose(); } }} />
       </div>
       <MenuHeader>版面配置</MenuHeader>
       {VIEW_TYPES.map((t) => (

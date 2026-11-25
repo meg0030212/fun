@@ -6,6 +6,7 @@ import { parseTypedDate, typedDateText, formatDay } from '../../dates';
 import { DateVal, datePart, formatDateValue, formatTime, hasTime, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Popover, MenuItem, MenuSep, MenuHeader, Anchor, Toggle } from '../Popover';
 import { askConfirm, setUI } from '../../ui';
+import { ImeInput, isImeKey } from '../../ime';
 import { Icon } from '../Icons';
 import { displayText, formatNumber, getValue, PROP_TYPES, propTypeLabel } from './dbutils';
 import { formulaValue } from '../../formula';
@@ -79,7 +80,7 @@ export function SelectEditor({ db, prop, row, anchor, onClose }: { db: Database;
         <input className="select-editor-input" autoFocus placeholder={selectedIds.length ? '' : '搜尋選項…'} value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); if (exact) pick(exact.id); else if (q.trim()) create(); else if (filtered[0]) pick(filtered[0].id); }
+            if ((e.key === 'Enter' && !isImeKey(e))) { e.preventDefault(); if (exact) pick(exact.id); else if (q.trim()) create(); else if (filtered[0]) pick(filtered[0].id); }
             if (e.key === 'Backspace' && !q && selectedIds.length) pick(selectedIds[selectedIds.length - 1]);
           }} />
       </div>
@@ -115,7 +116,7 @@ export function OptionMenu({ db, prop, opt, anchor, onClose }: { db: Database; p
       <div className="menu-search">
         <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)}
           onBlur={() => name.trim() && name !== opt.name && save({ name: name.trim() })}
-          onKeyDown={(e) => { if (e.key === 'Enter') { if (name.trim()) save({ name: name.trim() }); onClose(); } }} />
+          onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) { if (name.trim()) save({ name: name.trim() }); onClose(); } }} />
       </div>
       <MenuItem icon={<Icon.trash />} label="刪除" danger onClick={() => {
         updateDb(db.id, (d) => {
@@ -163,7 +164,7 @@ function DateTextInput({ value, roc, autoFocus, onCommit, onFocus, onDone }: {
         onBlur={() => { setFocused(false); if (!apply()) setText(shown); }}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (isImeKey(e)) return;
           if (e.key === 'Enter') { e.preventDefault(); if (apply() && (parsed || !typed)) onDone?.(); }
           if (e.key === 'Escape') { setText(shown); }
         }} />
@@ -384,9 +385,9 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
       return (
         <div className="cell-title-wrap">
           {row.icon && <span className="cell-icon">{/^(https?:|data:)/.test(row.icon) ? <img src={row.icon} alt="" /> : row.icon}</span>}
-          <input className="cell-input title" value={row.title} placeholder="未命名"
-            onChange={(e) => patchPage(row.id, { title: e.target.value }, 'typing')}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+          <ImeInput className="cell-input title" value={row.title} placeholder="未命名"
+            onValue={(v) => patchPage(row.id, { title: v }, 'typing')}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeKey(e)) (e.target as HTMLInputElement).blur(); }} />
           {onOpen && <button className="open-btn" onClick={onOpen}><Icon.expand size={12} /> 開啟</button>}
         </div>
       );
@@ -397,9 +398,9 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
       }
       return (
         <div className="cell-text-wrap">
-          <input className={'cell-input' + (prop.type !== 'text' && v ? ' link' : '')} value={v || ''} placeholder={mode === 'page' ? '空白' : ''}
+          <ImeInput className={'cell-input' + (prop.type !== 'text' && v ? ' link' : '')} value={v || ''} placeholder={mode === 'page' ? '空白' : ''}
             type={prop.type === 'email' ? 'email' : prop.type === 'phone' ? 'tel' : 'text'}
-            onChange={(e) => setRowProp(row.id, prop.id, e.target.value, 'typing')} />
+            onValue={(nv) => setRowProp(row.id, prop.id, nv, 'typing')} />
           {v && prop.type !== 'text' && (
             <a className="cell-link-btn" target="_blank" rel="noopener noreferrer"
               href={prop.type === 'email' ? 'mailto:' + v : prop.type === 'phone' ? 'tel:' + v : safeUrl(v)}><Icon.arrowUpRight size={12} /></a>
@@ -473,7 +474,7 @@ function NumberInput({ value, prop, onChange, placeholder }: { value: any; prop:
         }
         setEditing(null);
       }}
-      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+      onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) (e.target as HTMLInputElement).blur(); }} />
   );
 }
 
@@ -501,7 +502,7 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
     <Popover anchor={anchor} onClose={() => { saveName(); onClose(); }} width={260}>
       <div className="menu-search">
         <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} onBlur={saveName}
-          onKeyDown={(e) => { if (e.key === 'Enter') { saveName(); onClose(); } }} />
+          onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) { saveName(); onClose(); } }} />
       </div>
       <div className="menu-list">
         {prop.type !== 'title' && (
@@ -553,7 +554,7 @@ export function PropertyMenu({ db, view, prop, anchor, onClose }: { db: Database
             <div className="menu-search">
               <input className="input" placeholder="+ 新增選項" value={newOpt} onChange={(e) => setNewOpt(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newOpt.trim()) {
+                  if ((e.key === 'Enter' && !isImeKey(e)) && newOpt.trim()) {
                     const opt = { id: uid(), name: newOpt.trim(), color: randomColor() };
                     updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id); if (p) p.options = [...(p.options || []), opt]; });
                     setNewOpt('');
