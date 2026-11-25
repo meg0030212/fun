@@ -4,12 +4,12 @@ import katex from 'katex';
 import type { Block } from '../types';
 import { useStore } from '../store';
 import { navigate } from '../ui';
-import { hostname, htmlToText, pickFile, readFileAsDataURL, safeUrl, youtubeEmbed } from '../utils';
+import { escapeHtml, hostname, htmlToText, pickFile, readFileAsDataURL, safeUrl, youtubeEmbed } from '../utils';
 import { PageIcon } from './EmojiPicker';
 import { Icon } from './Icons';
 import { DatabaseView } from './db/DatabaseView';
 import { Editable } from './Editable';
-import { handleGridKey } from '../gridNav';
+import { useGrid } from '../gridNav';
 
 interface Props {
   block: Block;
@@ -204,6 +204,14 @@ function TocBlock({ pageId }: Props) {
 function SimpleTable({ block, update, readOnly }: Props) {
   const rows = block.rows || [['']];
   const cols = rows[0]?.length || 1;
+  const grid = useGrid({
+    get: (r, c) => htmlToText(rows[r]?.[c] || ''),
+    apply: (changes) => {
+      const next = rows.map((row) => [...row]);
+      changes.forEach(({ r, c, v }) => { if (next[r] && c < next[r].length) next[r][c] = v === null ? '' : escapeHtml(v); });
+      update({ rows: next });
+    },
+  });
   const setCell = (r: number, c: number, html: string) => {
     const next = rows.map((row) => [...row]);
     next[r][c] = html;
@@ -240,7 +248,7 @@ function SimpleTable({ block, update, readOnly }: Props) {
   return (
     <div className="blk-table-wrap">
       <div className="blk-table-scroll">
-        <table className="blk-table" onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+        <table className="blk-table" {...grid}>
           <tbody>
             {rows.map((row, r) => (
               <tr key={r} className={r === 0 && block.headerRow ? 'head' : ''}>

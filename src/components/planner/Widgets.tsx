@@ -6,7 +6,7 @@ import { uid } from '../../utils';
 import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, timePart, toDate, toLocalIso } from '../../dates';
 import { addSource, slotsOf, updateEntry, updatePlanner } from '../../planner';
 import { defaultsFromFilters, filterRows } from '../db/dbutils';
-import { handleGridKey } from '../../gridNav';
+import { useGrid } from '../../gridNav';
 import { isImeKey, useImeValue } from '../../ime';
 import { Editable } from '../Editable';
 import { Icon } from '../Icons';
@@ -237,10 +237,27 @@ export function MonthWidget(p: WidgetProps) {
     return daySlots.find((s) => { const r = slotRange(s.label); return r && t >= r[0] && t < r[1]; })?.id ?? null;
   };
   const setNote = (key: string, v: string) => set((d) => ({ ...d, days: { ...(d.days || {}), [key]: v } }), 'typing');
+  // grid coordinates → note key (slotted: row = week × slots + slot)
+  const keyAt = (r: number, c: number): string | null => {
+    const week = ns ? Math.floor(r / ns) : r;
+    const iso = cells[week * 7 + c];
+    if (!iso) return null;
+    return ns ? `${iso}|${daySlots[r % ns].id}` : iso;
+  };
+  const grid = useGrid({
+    get: (r, c) => { const k = keyAt(r, c); return k ? data.days?.[k] || '' : ''; },
+    apply: (changes) => set((d) => {
+      const days = { ...(d.days || {}) };
+      changes.forEach(({ r, c, v }) => { const k = keyAt(r, c); if (k) days[k] = v ?? ''; });
+      return { ...d, days };
+    }),
+  });
   return (
-    <div className={'pl-month' + (ns ? ' slotted' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}
+    <div className={'pl-month' + (ns ? ' slotted' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={grid.onKeyDown} onCopy={grid.onCopy} onCut={grid.onCut} onPaste={grid.onPaste}
       style={{ gridTemplateRows: `auto repeat(${cells.length / 7}, minmax(${ns ? 26 + ns * 26 : 84}px, 1fr))` }}
       onMouseDown={(e) => {
+        grid.onMouseDown(e);
+        if (e.defaultPrevented || e.shiftKey) return;
         // clicking anywhere in a day (or slot) puts the caret in its text, after what is written
         const t = e.target as HTMLElement;
         if (t.closest('textarea, button, .pl-event')) return;
@@ -310,10 +327,18 @@ export function SlotsWidget(p: WidgetProps) {
     return t >= s && t < s + step;
   };
   const showLabels = slots.some((s) => s.label);
+  const grid = useGrid({
+    get: (r, c) => (slots[r] && p.days[c] ? data.cells?.[`${p.days[c]}|${slots[r].key}`] || '' : ''),
+    apply: (changes) => set((x) => {
+      const cellsMap = { ...(x.cells || {}) };
+      changes.forEach(({ r, c, v }) => { if (slots[r] && p.days[c]) cellsMap[`${p.days[c]}|${slots[r].key}`] = v ?? ''; });
+      return { ...x, cells: cellsMap };
+    }),
+  });
   const single = p.days.length === 1;
   return (
     <div className="pl-slots-wrap">
-      <table className={'pl-slots' + (single ? ' single' : '') + (hourly ? ' hourly' : '')} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+      <table className={'pl-slots' + (single ? ' single' : '') + (hourly ? ' hourly' : '')} {...grid}>
         {!single && (
           <thead>
             <tr>
@@ -460,6 +485,17 @@ export function HabitWidget(p: WidgetProps) {
   const checks: Record<string, boolean> = data.checks || {};
   const today = todayIso();
   const toggle = (k: string) => !p.readOnly && set((d) => ({ ...d, checks: { ...(d.checks || {}), [k]: !d.checks?.[k] } }));
+  const grid = useGrid({
+    get: (r, c) => (habits[r] && p.days[c] && checks[`${habits[r].id}|${p.days[c]}`] ? '✓' : ''),
+    apply: (changes) => !p.readOnly && set((d) => {
+      const next = { ...(d.checks || {}) };
+      changes.forEach(({ r, c, v }) => {
+        if (!habits[r] || !p.days[c]) return;
+        next[`${habits[r].id}|${p.days[c]}`] = !!v && !/^(0|false|no|否|×|x)$/i.test(v.trim()) && v.trim() !== '';
+      });
+      return { ...d, checks: next };
+    }),
+  });
   if (!habits.length) return <div className="muted small pl-empty">在區塊設定（⚙）中新增要追蹤的習慣。</div>;
   if (p.days.length === 1) {
     const d = p.days[0];
@@ -476,7 +512,7 @@ export function HabitWidget(p: WidgetProps) {
   }
   return (
     <div className="pl-habit-wrap">
-      <table className={'pl-habit' + (p.days.length > 7 ? ' dense' : '')} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+      <table className={'pl-habit' + (p.days.length > 7 ? ' dense' : '')} {...grid}>
         <thead>
           <tr>
             <th className="pl-habit-name" />
