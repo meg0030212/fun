@@ -387,7 +387,7 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
           {row.icon && <span className="cell-icon">{/^(https?:|data:)/.test(row.icon) ? <img src={row.icon} alt="" /> : row.icon}</span>}
           <ImeInput className="cell-input title" value={row.title} placeholder="未命名"
             onValue={(v) => patchPage(row.id, { title: v }, 'typing')}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !isImeKey(e)) (e.target as HTMLInputElement).blur(); }} />
+          />
           {onOpen && <button className="open-btn" onClick={onOpen}><Icon.expand size={12} /> 開啟</button>}
         </div>
       );
@@ -474,7 +474,14 @@ function NumberInput({ value, prop, onChange, placeholder }: { value: any; prop:
         }
         setEditing(null);
       }}
-      onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) (e.target as HTMLInputElement).blur(); }} />
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !isImeKey(e) && editing !== null) {
+          const t = editing.replace(/[,%$NT\s]/g, '');
+          const n = t === '' || isNaN(Number(t)) ? null : Number(t);
+          onChange(n);
+          setEditing(n === null ? '' : String(n));
+        }
+      }} />
   );
 }
 

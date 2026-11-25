@@ -4,6 +4,7 @@
    on the first/last line and ←/→ when it is at the start/end; elsewhere they move the caret. */
 import type React from 'react';
 import { caretOnFirstLine, caretOnLastLine, getCaretOffset, setCaret } from './utils';
+import { isImeKey } from './ime';
 
 type Dir = 'up' | 'down' | 'left' | 'right';
 const DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -50,7 +51,7 @@ export function focusCell(cell: HTMLElement, caret: 'start' | 'end' = 'end') {
 
 /** handles arrows (and Enter/Space/Escape on cells); returns true when it took the key */
 export function handleGridKey(e: React.KeyboardEvent, root: HTMLElement): boolean {
-  if (e.defaultPrevented || e.nativeEvent.isComposing || e.altKey || e.ctrlKey || e.metaKey) return false;
+  if (e.defaultPrevented || isImeKey(e) || e.altKey || e.ctrlKey || e.metaKey) return false;
   const target = e.target as HTMLElement;
   if (!root.contains(target)) return false; // keys from popovers rendered elsewhere
   const cell = target.closest<HTMLElement>('[data-gc]');
@@ -72,6 +73,16 @@ export function handleGridKey(e: React.KeyboardEvent, root: HTMLElement): boolea
     // leave the text field but stay on the cell, so arrows keep moving between cells
     cell.focus({ preventScroll: true });
     e.preventDefault();
+    return true;
+  }
+
+  if (ed && e.key === 'Enter' && !e.shiftKey) {
+    // Enter finishes typing but stays in this cell, caret right after the text (Shift+Enter = new line)
+    e.preventDefault();
+    if (ed.tagName === 'INPUT' || ed.tagName === 'TEXTAREA') {
+      const f = ed as HTMLInputElement;
+      try { f.setSelectionRange(f.value.length, f.value.length); } catch { /* ignore */ }
+    } else setCaret(ed, 'end');
     return true;
   }
 
