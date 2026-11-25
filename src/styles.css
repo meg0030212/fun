@@ -844,6 +844,11 @@ span.bg-gray, span.bg-brown, span.bg-orange, span.bg-yellow, span.bg-green, span
 .pl-tpl-sources { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 12px; }
 .pl-tpl-src { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
 
+/* keyboard grid navigation: the focused cell gets a clear outline */
+[data-gc]:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+.td[data-gc]:focus-within:not(:focus) { box-shadow: inset 0 0 0 1px var(--blue-soft); }
+.pl-habit-cell:focus { outline: 2px solid var(--blue); outline-offset: -2px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }

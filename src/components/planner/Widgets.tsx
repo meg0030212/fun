@@ -6,6 +6,7 @@ import { uid } from '../../utils';
 import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, timePart, toDate, toLocalIso } from '../../dates';
 import { addSource, slotsOf, updateEntry, updatePlanner } from '../../planner';
 import { defaultsFromFilters, filterRows } from '../db/dbutils';
+import { handleGridKey } from '../../gridNav';
 import { Editable } from '../Editable';
 import { Icon } from '../Icons';
 import { PageIcon } from '../EmojiPicker';
@@ -226,10 +227,10 @@ export function MonthWidget(p: WidgetProps) {
   const target = targetSource(p.page, p.w);
   const today = todayIso();
   return (
-    <div className="pl-month">
+    <div className="pl-month" data-gwrap="1" onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
       {Array.from({ length: 7 }, (_, i) => <div key={i} className="pl-month-dow">{WD[(i + ws) % 7]}</div>)}
       {cells.map((iso, i) => iso ? (
-        <div key={iso} className={'pl-month-cell' + (iso === today ? ' today' : '') + ([0, 6].includes(toDate(iso).getDay()) ? ' weekend' : '')}>
+        <div key={iso} className={'pl-month-cell' + (iso === today ? ' today' : '') + ([0, 6].includes(toDate(iso).getDay()) ? ' weekend' : '')} data-gr={Math.floor(i / 7)} data-gc={i % 7}>
           <div className="pl-month-num">
             <span>{toDate(iso).getDate()}</span>
             {target && !p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, iso)}><Icon.plus size={11} /></button>}
@@ -264,7 +265,7 @@ export function SlotsWidget(p: WidgetProps) {
   const single = p.days.length === 1;
   return (
     <div className="pl-slots-wrap">
-      <table className={'pl-slots' + (single ? ' single' : '') + (hourly ? ' hourly' : '')}>
+      <table className={'pl-slots' + (single ? ' single' : '') + (hourly ? ' hourly' : '')} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
         {!single && (
           <thead>
             <tr>
@@ -288,13 +289,13 @@ export function SlotsWidget(p: WidgetProps) {
               ))}
             </tr>
           )}
-          {slots.map((s) => (
+          {slots.map((s, si) => (
             <tr key={s.key}>
               {showLabels && <td className="pl-slot-label">{hourly ? formatTime(s.label) : s.label}</td>}
-              {p.days.map((d) => {
+              {p.days.map((d, di) => {
                 const k = `${d}|${s.key}`;
                 return (
-                  <td key={d} className={d === today && !single ? 'today' : ''}>
+                  <td key={d} className={d === today && !single ? 'today' : ''} data-gr={si} data-gc={di}>
                     {hourly && events.filter((e) => inSlot(e, d, s.key)).map((e) => <EventChip key={e.row.id} ev={e} day={d} />)}
                     <AutoText value={data.cells?.[k] || ''} readOnly={p.readOnly} className="pl-cell-text"
                       onChange={(v) => set((x) => ({ ...x, cells: { ...(x.cells || {}), [k]: v } }), 'typing')} />
@@ -427,7 +428,7 @@ export function HabitWidget(p: WidgetProps) {
   }
   return (
     <div className="pl-habit-wrap">
-      <table className={'pl-habit' + (p.days.length > 7 ? ' dense' : '')}>
+      <table className={'pl-habit' + (p.days.length > 7 ? ' dense' : '')} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
         <thead>
           <tr>
             <th className="pl-habit-name" />
@@ -441,9 +442,10 @@ export function HabitWidget(p: WidgetProps) {
             return (
               <tr key={h.id}>
                 <td className="pl-habit-name">{h.name}</td>
-                {p.days.map((d) => {
+                {p.days.map((d, di) => {
                   const k = `${h.id}|${d}`;
-                  return <td key={d} className={'pl-habit-cell' + (checks[k] ? ' on' : '') + (d === today ? ' today' : '')} onClick={() => toggle(k)}>{checks[k] ? '●' : ''}</td>;
+                  return <td key={d} className={'pl-habit-cell' + (checks[k] ? ' on' : '') + (d === today ? ' today' : '')} onClick={() => toggle(k)}
+                    data-gr={habits.indexOf(h)} data-gc={di} tabIndex={0} role="checkbox" aria-checked={!!checks[k]} aria-label={`${h.name} ${d}`}>{checks[k] ? '●' : ''}</td>;
                 })}
                 <td className="pl-habit-count">{n}/{p.days.length}</td>
               </tr>
