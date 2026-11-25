@@ -110,11 +110,11 @@ export function useSourceEvents(page: Page, w: PlannerWidget, days: string[]): E
 function EventChip({ ev, day }: { ev: Ev; day?: string }) {
   const t = hasTime(ev.d.start) && (!day || datePart(ev.d.start) === day) ? timePart(ev.d.start) : '';
   return (
-    <div className="pl-event" onClick={() => openPeek(ev.row.id)} title={`${ev.row.title || '未命名'} · ${sourceName(ev.src)}`}
+    <div className="pl-event" onClick={() => openPeek(ev.row.id)} title={[ev.row.title, sourceName(ev.src)].filter(Boolean).join(' · ')}
       style={{ background: `var(--b-${ev.src.color})`, borderLeftColor: `var(--c-${ev.src.color})` }}>
       {t && <span className="pl-event-time">{t}</span>}
       {ev.row.icon && !/^(https?:|data:)/.test(ev.row.icon) && <span>{ev.row.icon}</span>}
-      <span className="pl-event-title">{ev.row.title || '未命名'}</span>
+      {ev.row.title && <span className="pl-event-title">{ev.row.title}</span>}
     </div>
   );
 }
