@@ -14,6 +14,7 @@ import { BlockMenu } from './BlockMenu';
 import { Icon } from './Icons';
 import { BlockContentExtra } from './Blocks';
 import { navigate, setUI, toast } from '../ui';
+import { attachCrossSelect } from '../crossSelect';
 import { blocksToMarkdown, markdownToBlocks } from '../markdown';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -807,6 +808,41 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
     const t = window.setTimeout(() => document.addEventListener('keydown', onKey), 0);
     return () => { window.clearTimeout(t); document.removeEventListener('keydown', onKey); };
   }, [selected.length > 0]); // eslint-disable-line
+
+  /* ---------- text selection across blocks (Shift+arrows / Shift+click / drag) ---------- */
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || readOnly) return;
+    return attachCrossSelect(root, {
+      commit: (startId, html, removeIds) => {
+        setBlocks(pageId, (bs) => {
+          const del = new Set<number>();
+          removeIds.forEach((id) => {
+            const i = bs.findIndex((b) => b.id === id);
+            if (i < 0) return;
+            // a collapsed toggle takes its hidden children with it
+            const end = bs[i].type === 'toggle' && bs[i].collapsed ? subtreeEnd(bs as Block[], i) : i + 1;
+            for (let k = i; k < end; k++) del.add(k);
+          });
+          const out = (bs as Block[]).filter((_, k) => !del.has(k));
+          const first = out.find((b) => b.id === startId);
+          if (first) first.html = html;
+          if (!out.length) out.push(newBlock());
+          return out;
+        });
+      },
+      syncAll: () => {
+        setBlocks(pageId, (bs) => {
+          bs.forEach((b) => {
+            const el = root.querySelector<HTMLElement>(`[data-block-id="${b.id}"] > .block-body .editable.nav`);
+            if (!el) return;
+            const v = b.type === 'code' ? el.textContent || '' : cleanHtml(el.innerHTML);
+            if (v !== b.html) b.html = v;
+          });
+        }, 'typing');
+      },
+    });
+  }, [pageId, readOnly]);
 
   /* ---------- clear selection / rectangle select ---------- */
   useEffect(() => {
