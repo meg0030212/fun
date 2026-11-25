@@ -193,6 +193,8 @@ export interface PlannerWidget {
   w: number;
   /** height in grid rows */
   h: number;
+  /** content height in pixels set by dragging the corner (undefined = fit content) */
+  hp?: number;
   color?: string;
   opts?: WidgetOpts;
 }
