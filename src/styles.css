@@ -1332,3 +1332,18 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .pl-sch-date { color: var(--text-3); }
 /* calendars and tables sit on a plain surface; paper only behind writing blocks */
 .pl-card-month .pl-card-body, .pl-card-slots .pl-card-body, .pl-card-habit .pl-card-body, .pl-card-schedule .pl-card-body { background-image: none !important; }
+
+/* planner: drag to resize blocks; content scrolls inside instead of spilling over */
+.pl-card { position: relative; min-width: 0; }
+.pl-card-body { overflow: auto; min-width: 0; }
+.pl-card-body.fixed { flex: none; min-height: 0; }
+.pl-resize-x { position: absolute; top: 0; bottom: 10px; right: -14px; width: 10px; cursor: ew-resize; z-index: 2; }
+.pl-resize-xy { position: absolute; right: -12px; bottom: -12px; width: 16px; height: 16px; cursor: nwse-resize; z-index: 3; opacity: 0; border-radius: 3px;
+  background: linear-gradient(135deg, transparent 0 45%, var(--text-3) 45% 52%, transparent 52% 65%, var(--text-3) 65% 72%, transparent 72%); }
+.pl-card:hover .pl-resize-xy, .pl-grid.editing .pl-resize-xy, .pl-grid.resizing .pl-resize-xy { opacity: .8; }
+.pl-resize-x:hover, .pl-grid.resizing .pl-card:has(.pl-resize-badge) .pl-resize-x { background: linear-gradient(var(--blue), var(--blue)) center / 2px 100% no-repeat; }
+.pl-grid.resizing .pl-card:has(.pl-resize-badge) { outline: 2px solid var(--blue-soft); outline-offset: 6px; border-radius: 4px; }
+.pl-resize-badge { position: absolute; right: 4px; bottom: 4px; z-index: 4; font-size: 11px; background: var(--text); color: var(--bg); padding: 2px 6px; border-radius: 4px; pointer-events: none; }
+body.pl-resizing-x, body.pl-resizing-x * { cursor: ew-resize !important; user-select: none; }
+body.pl-resizing-xy, body.pl-resizing-xy * { cursor: nwse-resize !important; user-select: none; }
+@media (max-width: 700px) { .pl-resize-x, .pl-resize-xy { display: none; } }

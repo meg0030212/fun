@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { isImeKey } from '../../ime';
 import type { Page, PlannerPeriod, PlannerWidget, WidgetType } from '../../types';
 import { askConfirm, setUI, toast } from '../../ui';
@@ -29,6 +29,39 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
   const dbs = useStore((s) => s.dbs);
   const [settings, setSettings] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [drag, setDrag] = useState<string | null>(null);
+  const [resizing, setResizing] = useState<{ id: string; w: number; hp?: number } | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  /** drag a block's right edge (width, snapped to the 12 columns) or corner (width + height) */
+  const startResize = (e: React.MouseEvent, w: PlannerWidget, mode: 'x' | 'xy') => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const grid = gridRef.current;
+    const card = (e.currentTarget as HTMLElement).closest('.pl-card') as HTMLElement | null;
+    const body = card?.querySelector('.pl-card-body') as HTMLElement | null;
+    if (!grid || !card || !body) return;
+    const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+    const col = (grid.getBoundingClientRect().width - gap * 11) / 12;
+    const left = card.getBoundingClientRect().left;
+    const top = body.getBoundingClientRect().top;
+    let cur = { id: w.id, w: w.w, hp: w.hp };
+    const move = (ev: MouseEvent) => {
+      const span = Math.max(2, Math.min(12, Math.round((ev.clientX - left + gap) / (col + gap))));
+      cur = { id: w.id, w: span, hp: mode === 'xy' ? Math.max(60, Math.round(ev.clientY - top)) : w.hp };
+      setResizing(cur);
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.classList.remove('pl-resizing-' + mode);
+      setResizing(null);
+      if (cur.w !== w.w || cur.hp !== w.hp) updatePlanner(page.id, (p) => { const x = p.widgets.find((y) => y.id === w.id); if (x) { x.w = cur.w; if (cur.hp) x.hp = cur.hp; } });
+    };
+    document.body.classList.add('pl-resizing-' + mode);
+    setResizing(cur);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  };
   const ws = pl.style.weekStart;
   const key = periodKey(anchor, pl.period, ws);
   const prevKey = periodKey(shiftPeriod(anchor, pl.period, -1), pl.period, ws);
@@ -86,15 +119,18 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
           {sources.length === 0 && <span className="muted small">連結你的排程資料庫，行程就會出現在月曆、時段表與行程區塊，並保持同步。</span>}
         </div>
       )}
-      {edit && <div className="pl-edit-hint">拖曳區塊標題可以調整順序；用寬度、高度選單調整大小；按 ⚙ 修改內容設定。</div>}
+      {edit && <div className="pl-edit-hint">拖曳區塊標題可以調整順序；拖曳區塊右邊或右下角可以調整寬度與高度（雙擊右下角恢復自動高度）；按 ⚙ 修改內容設定。</div>}
 
-      <div className={'pl-grid' + (edit ? ' editing' : '')}>
+      <div className={'pl-grid' + (edit ? ' editing' : '') + (resizing ? ' resizing' : '')} ref={gridRef}>
         {pl.widgets.map((w) => {
           const Comp = WIDGETS[w.type];
           const accent = w.color || pl.style.accent;
+          const live = resizing?.id === w.id ? resizing : null;
+          const cw = live ? live.w : w.w;
+          const hp = live ? live.hp : w.hp;
           return (
             <section key={w.id} className={'pl-card pl-card-' + w.type + (drag === w.id ? ' dragging' : '')}
-              style={{ gridColumn: `span ${Math.min(12, w.w)}`, gridRow: `span ${w.h}`, ['--w-accent' as any]: `var(--c-${accent})`, ['--w-accent-bg' as any]: `var(--b-${accent})` }}
+              style={{ gridColumn: `span ${Math.min(12, cw)}`, gridRow: `span ${w.h}`, ['--w-accent' as any]: `var(--c-${accent})`, ['--w-accent-bg' as any]: `var(--b-${accent})` }}
               onDragOver={(e) => { if (drag && drag !== w.id) e.preventDefault(); }}
               onDrop={(e) => { e.preventDefault(); if (drag && drag !== w.id) move(drag, w.id); setDrag(null); }}>
               <header className="pl-card-head" draggable={edit} onDragStart={(e) => { setDrag(w.id); e.dataTransfer.setData('text/plain', w.id); }} onDragEnd={() => setDrag(null)}>
@@ -104,6 +140,7 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
                 {edit && (
                   <>
                     <select className="pl-size" value={w.w} title="寬度" onChange={(e) => updatePlanner(page.id, (p) => { p.widgets.find((x) => x.id === w.id)!.w = +e.target.value; })}>
+                      {!WIDTHS.some(([n]) => n === w.w) && <option value={w.w}>寬 {w.w}/12</option>}
                       {WIDTHS.map(([n, l]) => <option key={n} value={n}>寬 {l}</option>)}
                     </select>
                     <select className="pl-size" value={w.h} title="高度" onChange={(e) => updatePlanner(page.id, (p) => { p.widgets.find((x) => x.id === w.id)!.h = +e.target.value; })}>
@@ -116,9 +153,17 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
                   if (await askConfirm(`移除「${w.title}」區塊？這個區塊在所有頁面寫的內容都會一起隱藏。`, '移除')) updatePlanner(page.id, (p) => { p.widgets = p.widgets.filter((x) => x.id !== w.id); });
                 }}><Icon.x size={13} /></button>}
               </header>
-              <div className="pl-card-body">
+              <div className={'pl-card-body' + (hp ? ' fixed' : '')} style={hp ? { height: hp } : undefined}>
                 <Comp page={page} w={w} pkey={key} prevKey={prevKey} days={days} anchor={anchor} readOnly={readOnly} />
               </div>
+              {canEdit && (
+                <>
+                  <span className="pl-resize-x" title="拖曳調整寬度" onMouseDown={(e) => startResize(e, w, 'x')} />
+                  <span className="pl-resize-xy" title="拖曳調整大小（雙擊恢復自動高度）" onMouseDown={(e) => startResize(e, w, 'xy')}
+                    onDoubleClick={() => updatePlanner(page.id, (p) => { const x = p.widgets.find((y) => y.id === w.id); if (x) delete x.hp; })} />
+                </>
+              )}
+              {live && <span className="pl-resize-badge">寬 {WIDTHS.find(([n]) => n === cw)?.[1] || `${cw}/12`}{hp ? ` · 高 ${Math.round(hp)}px` : ''}</span>}
             </section>
           );
         })}
