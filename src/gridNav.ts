@@ -147,11 +147,28 @@ export function selectedPts(root: HTMLElement): Pt[] {
 function paint(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>('[data-gsel]').forEach((el) => el.removeAttribute('data-gsel'));
   const s = ranges.get(root);
-  if (!s || (s.a.r === s.f.r && s.a.c === s.f.c)) { ranges.delete(root); painted.delete(root); root.removeAttribute('data-grange'); return; }
+  if (!s || (s.a.r === s.f.r && s.a.c === s.f.c)) {
+    ranges.delete(root); painted.delete(root); root.removeAttribute('data-grange');
+    root.dispatchEvent(new CustomEvent('gridrange', { detail: null }));
+    return;
+  }
   const pts = selectedPts(root);
   pts.forEach((p) => cellAt(root, p)?.setAttribute('data-gsel', '1'));
   root.setAttribute('data-grange', String(pts.length));
   painted.add(root);
+  root.dispatchEvent(new CustomEvent('gridrange', { detail: rect(s.a, s.f) }));
+}
+
+/** the selected block of a grid (null when only one cell is selected) */
+export function getRangeRect(root: HTMLElement) {
+  const s = ranges.get(root);
+  return s ? rect(s.a, s.f) : null;
+}
+
+/** select a block programmatically (e.g. the cells a fill just wrote) */
+export function setRange(root: HTMLElement, a: { r: number; c: number }, f: { r: number; c: number }) {
+  ranges.set(root, { a, f });
+  paint(root);
 }
 
 export function clearRange(root: HTMLElement) { ranges.delete(root); paint(root); }
