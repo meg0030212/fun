@@ -93,7 +93,7 @@ export function PlannerView({ page, readOnly }: { page: Page; readOnly: boolean 
           const Comp = WIDGETS[w.type];
           const accent = w.color || pl.style.accent;
           return (
-            <section key={w.id} className={'pl-card' + (drag === w.id ? ' dragging' : '')}
+            <section key={w.id} className={'pl-card pl-card-' + w.type + (drag === w.id ? ' dragging' : '')}
               style={{ gridColumn: `span ${Math.min(12, w.w)}`, gridRow: `span ${w.h}`, ['--w-accent' as any]: `var(--c-${accent})`, ['--w-accent-bg' as any]: `var(--b-${accent})` }}
               onDragOver={(e) => { if (drag && drag !== w.id) e.preventDefault(); }}
               onDrop={(e) => { e.preventDefault(); if (drag && drag !== w.id) move(drag, w.id); setDrag(null); }}>
