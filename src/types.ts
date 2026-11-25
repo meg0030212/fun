@@ -109,6 +109,19 @@ export interface View {
   calcs?: Record<string, string>;
   /** calendar layout */
   calMode?: 'month' | 'week';
+  /** calendar: other databases whose dated rows also show here */
+  calLinks?: PlannerSource[];
+  /** calendar: colour, visibility and tag field of this database's own rows */
+  calSelf?: { color?: string; hidden?: boolean; tagProp?: string };
+  /** calendar: hide times such as 13:30 */
+  calHideTime?: boolean;
+  /** calendar (month): split each day into slots such as 上午／下午／晚上 */
+  calSlotMode?: 'none' | 'custom';
+  calSlots?: { id: string; label: string; time?: string }[];
+  /** calendar: hide the quick tag bar */
+  calHideTagBar?: boolean;
+  /** calendar: source new quick tags go to ('self' = this database) */
+  calTagTo?: string;
   cardPreview?: 'none' | 'cover' | 'content';
 }
 

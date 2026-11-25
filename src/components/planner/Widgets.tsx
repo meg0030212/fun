@@ -1,9 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Database, Page, PlannerSource, PlannerWidget, Property, SelectOption } from '../../types';
-import { addRow, createDatabasePage, getState, makeProp, patchPage, trashPage, update, updateDb, useStore } from '../../store';
+import type { Page, PlannerSource, PlannerWidget } from '../../types';
+import { addRow, createDatabasePage, getState, patchPage, trashPage, useStore } from '../../store';
 import { navigate, openPeek } from '../../ui';
-import { COLORS, COLOR_NAMES, uid } from '../../utils';
-import { Popover } from '../Popover';
+import { uid } from '../../utils';
+import {
+  collectEvents, createTagOption, eventColors, Ev, Slot, slotAddPair, slotIndexOf, sourceDateProp, sourceName, sourceTagProp, dbTitle,
+} from '../../eventSources';
+import { Brush, stampTag, TagBar, TagCtx, TagMenu } from '../TagTools';
 import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, timePart, toDate, toLocalIso } from '../../dates';
 import { addSource, slotsOf, updateEntry, updatePlanner, updateSource } from '../../planner';
 import { defaultsFromFilters, filterRows } from '../db/dbutils';
@@ -60,7 +63,8 @@ export function AutoText({ value, onChange, placeholder, readOnly, className, on
 
 /* ---------------- events from linked sources ---------------- */
 
-export type Ev = { row: Page; d: DateVal; src: PlannerSource; tags: SelectOption[] };
+export type { Ev } from '../../eventSources';
+export { dbTitle, sourceName, sourceDateProp, sourceTagProp, parseSpan, slotAddText } from '../../eventSources';
 
 /** visible planner sources this block shows */
 export function widgetSources(page: Page, w: PlannerWidget): PlannerSource[] {
@@ -69,145 +73,12 @@ export function widgetSources(page: Page, w: PlannerWidget): PlannerSource[] {
   return pick ? all.filter((s) => pick.includes(s.id)) : all;
 }
 
-export function sourceDateProp(db: Database | undefined, src: PlannerSource) {
-  return db?.properties.find((p) => p.id === src.dateProp && p.type === 'date') || db?.properties.find((p) => p.type === 'date');
-}
-
-export function dbTitle(dbId: string): string {
-  const s = getState();
-  const d = s.dbs[dbId];
-  if (!d) return '（已刪除的資料庫）';
-  return d.inline ? d.title || '未命名資料庫' : s.pages[d.hostPageId]?.title || '未命名資料庫';
-}
-
-export function sourceName(src: PlannerSource): string {
-  return src.name?.trim() || dbTitle(src.dbId);
-}
-
-/* ---------------- tags ---------------- */
-
-const isTagType = (p: Property) => p.type === 'select' || p.type === 'multi_select';
-
-/** the select / multi-select property a source uses as tags: the chosen one, else the first one its filters don't fix */
-export function sourceTagProp(db: Database | undefined, src: PlannerSource): Property | undefined {
-  if (!db || src.tagProp === 'none') return undefined;
-  const chosen = db.properties.find((p) => p.id === src.tagProp && isTagType(p));
-  if (chosen) return chosen;
-  const fixed = new Set(src.filters.map((f) => f.propId));
-  const free = db.properties.filter((p) => isTagType(p) && !fixed.has(p.id));
-  // only a field that sounds like tags / people is picked by itself (not e.g. 優先順序); others are chosen in the source settings
-  return free.find((p) => /標籤|标签|tag|label|人員|人员|成員|成员|對象|对象|學長|学长|學姊|學姐|負責|负责|people|person|who/i.test(p.name));
-}
-
-function rowTags(row: Page, prop: Property | undefined): SelectOption[] {
-  if (!prop) return [];
-  const v = row.props?.[prop.id];
-  const ids: string[] = Array.isArray(v) ? v : v ? [v] : [];
-  return ids.map((id) => prop.options?.find((o) => o.id === id)).filter((o): o is SelectOption => !!o);
-}
-
-/** add a tag option to the source's tag property (creating a 「標籤」 property when the database has none) */
-export function createTag(pageId: string, src: PlannerSource, name: string): string | null {
-  const db = getState().dbs[src.dbId];
-  if (!db || !name.trim()) return null;
-  name = name.trim();
-  const tp = sourceTagProp(db, src);
-  const same = tp?.options?.find((o) => o.name === name);
-  if (same) return same.id;
-  const used = new Set((tp?.options || []).map((o) => o.color));
-  const free = ['blue', 'green', 'orange', 'purple', 'pink', 'red', 'yellow', 'brown', 'gray'].filter((c) => !used.has(c));
-  const color = free[0] || COLORS[1 + Math.floor(Math.random() * (COLORS.length - 1))];
-  const opt: SelectOption = { id: uid(), name, color };
-  if (tp) {
-    updateDb(db.id, (d) => { const x = d.properties.find((y) => y.id === tp.id); if (x) x.options = [...(x.options || []), opt]; });
-  } else {
-    const names = new Set(db.properties.map((p) => p.name));
-    const np = makeProp('select', ['標籤', '行程標籤', '手帳標籤'].find((n) => !names.has(n)) || '手帳標籤 ' + (db.properties.length + 1), { options: [opt] });
-    updateDb(db.id, (d) => { d.properties.push(np); });
-    updateSource(pageId, src.id, (x) => { x.tagProp = np.id; });
-  }
-  return opt.id;
-}
-
-/** add an event carrying one tag straight to the database (no detail window); span = ["HH:mm", "HH:mm"] */
-export function addTaggedEvent(src: PlannerSource, day: string, optId: string, span?: [string, string] | null): string | null {
-  const db = getState().dbs[src.dbId];
-  const prop = sourceDateProp(db, src);
-  const tp = sourceTagProp(db, src);
-  if (!db || !prop || !tp) return null;
-  const opt = tp.options?.find((o) => o.id === optId);
-  const value = span ? `${day}T${span[0]}/${day}T${span[1]}` : day;
-  return addRow(db.id, {
-    ...defaultsFromFilters(db, { filters: src.filters }),
-    [prop.id]: value,
-    [tp.id]: tp.type === 'multi_select' ? [optId] : optId,
-  }, opt?.name || '');
-}
-
-/* ---------------- day slots (上午／下午／晚上…) ---------------- */
-
-type Slot = { id: string; label: string; time?: string };
-const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-
-/** "13:30-17:30" (also 13：30～17：30, 1330-1730) → minutes */
-export function parseSpan(t?: string): [number, number] | null {
-  if (!t) return null;
-  const m = t.replace(/：/g, ':').match(/^\s*(\d{1,2}):?(\d{2})\s*[-–~～至到]\s*(\d{1,2}):?(\d{2})\s*$/);
-  if (!m) return null;
-  const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
-  return a < b && b <= 24 * 60 ? [a, b] : null;
-}
-
-/** usual hours a slot name means, used for events added to it */
-const LABEL_TIMES: [RegExp, string][] = [
-  [/清晨|早晨|早上|上午|morning|\bam\b/i, '09:00-12:00'],
-  [/中午|午餐|noon|lunch/i, '12:00-13:30'],
-  [/下午|afternoon|\bpm\b/i, '13:30-17:30'],
-  [/傍晚|dusk/i, '17:30-19:00'],
-  [/晚上|夜|evening|night/i, '19:00-21:00'],
-];
-
-/** evenly share 08:00–20:00 between slots whose name says nothing about time */
-function positional(i: number, n: number): [number, number] {
-  const step = Math.floor((12 * 60) / Math.max(1, n) / 30) * 30 || 30;
-  return [8 * 60 + i * step, 8 * 60 + (i + 1) * step];
-}
-
-/** hours given to events added in slot i */
-export function slotAddSpan(slots: Slot[], i: number): [number, number] {
-  const s = slots[i];
-  return parseSpan(s.time) || parseSpan(LABEL_TIMES.find(([re]) => re.test(s.label))?.[1]) || positional(i, slots.length);
-}
-export const slotAddText = (slots: Slot[], i: number) => slotAddSpan(slots, i).map(hm).join('-');
-
-/** hours whose events land in slot i */
-function slotPlaceRange(slots: Slot[], i: number): [number, number] {
-  return parseSpan(slots[i].time) || slotRange(slots[i].label) || positional(i, slots.length);
-}
-
 export function useSourceEvents(page: Page, w: PlannerWidget, days: string[]): Ev[] {
   const pages = useStore((s) => s.pages);
   const dbs = useStore((s) => s.dbs);
   const sources = widgetSources(page, w);
   const sig = JSON.stringify(sources);
-  return useMemo(() => {
-    const set = new Set(days);
-    const out: Ev[] = [];
-    const seen = new Set<string>();
-    sources.forEach((src) => {
-      const db = dbs[src.dbId];
-      const prop = sourceDateProp(db, src);
-      const tp = sourceTagProp(db, src);
-      if (!db || !prop) return;
-      const rows = filterRows(Object.values(pages).filter((r) => r.rowOf === db.id && !r.trashed), db, src.filters);
-      rows.forEach((r) => {
-        if (seen.has(r.id)) return; // the same row can match two sources of one database
-        const d = parseDateValue(r.props?.[prop.id]);
-        if (d && daysCovered(d).some((x) => set.has(x))) { out.push({ row: r, d, src, tags: rowTags(r, tp) }); seen.add(r.id); }
-      });
-    });
-    return out.sort((a, b) => toDate(a.d.start).getTime() - toDate(b.d.start).getTime());
-  }, [pages, dbs, sig, days]); // eslint-disable-line
+  return useMemo(() => collectEvents(pages, dbs, sources, new Set(days)), [pages, dbs, sig, days]); // eslint-disable-line
 }
 
 function EventChip({ ev, day, showTime = true, onRemove, onClick }: {
@@ -216,17 +87,13 @@ function EventChip({ ev, day, showTime = true, onRemove, onClick }: {
   const t = showTime && hasTime(ev.d.start) && (!day || datePart(ev.d.start) === day) ? timePart(ev.d.start) : '';
   const tagNames = ev.tags.map((o) => o.name).join('、');
   const label = ev.row.title || tagNames;
-  // a tagged event takes its tag's colour, so each person / kind of work is easy to tell apart
-  const tag = ev.tags[0];
-  const style = tag
-    ? { background: `var(--t-${tag.color})`, borderLeftColor: `var(--c-${tag.color === 'default' ? 'gray' : tag.color})` }
-    : { background: `var(--b-${ev.src.color})`, borderLeftColor: `var(--c-${ev.src.color})` };
+  const c = eventColors(ev);
   const timeText = hasTime(ev.d.start) ? timePart(ev.d.start) + (ev.d.end && hasTime(ev.d.end) && datePart(ev.d.end) === datePart(ev.d.start) ? '–' + timePart(ev.d.end) : '') : '';
   return (
-    <div className={'pl-event' + (tag ? ' tagged' : '')} data-ev={ev.row.id}
+    <div className={'pl-event' + (ev.tags.length ? ' tagged' : '')} data-ev={ev.row.id}
       onClick={(e) => { if (onClick?.(e) === true) return; openPeek(ev.row.id); }}
       title={[timeText, label, tagNames && tagNames !== label ? tagNames : '', sourceName(ev.src)].filter(Boolean).join(' · ')}
-      style={style}>
+      style={{ background: c.bg, borderLeftColor: c.edge }}>
       {t && <span className="pl-event-time">{t}</span>}
       {ev.row.icon && !/^(https?:|data:)/.test(ev.row.icon) && <span>{ev.row.icon}</span>}
       {label && <span className="pl-event-title">{label}</span>}
@@ -332,14 +199,6 @@ export function ListWidget(p: WidgetProps) {
 
 /* ---------------- month calendar ---------------- */
 
-type Brush = { srcId: string; optId: string };
-
-/** sources of this block that can hold dated rows */
-function useUsableSources(page: Page, w: PlannerWidget) {
-  const dbs = useStore((s) => s.dbs);
-  return widgetSources(page, w).filter((s) => sourceDateProp(dbs[s.dbId], s)).map((src) => ({ src, tp: sourceTagProp(dbs[src.dbId], src) }));
-}
-
 /** the source new quick tags go to: the planner's tag source if this block shows it, else the usual target */
 export function tagTarget(page: Page, w: PlannerWidget): PlannerSource | undefined {
   const list = widgetSources(page, w);
@@ -356,223 +215,19 @@ function createTagDatabase(page: Page): string {
   return id;
 }
 
-/** rename / recolour / delete tags, and choose where new tags are kept */
-function ManageTags({ page, w, anchor, onClose, onDeleted, only }: {
-  page: Page; w: PlannerWidget; anchor: HTMLElement; onClose: () => void; onDeleted: (optId: string) => void;
-  /** edit just this one tag (from the tag itself) */
-  only?: Brush;
-}) {
+/** quick-tag context for a planner block */
+function usePlannerTagCtx(page: Page, w: PlannerWidget): TagCtx {
   const dbs = useStore((s) => s.dbs);
-  const pages = useStore((s) => s.pages);
-  const usable = useUsableSources(page, w);
-  const all = widgetSources(page, w).filter((s) => sourceDateProp(dbs[s.dbId], s));
-  const tt = tagTarget(page, w);
-  const [confirm, setConfirm] = useState<{ srcId: string; optId: string } | null>(null);
-  const [colorOf, setColorOf] = useState<string | null>(null);
-  const setOpt = (dbId: string, propId: string, optId: string, fn: (o: SelectOption) => void) =>
-    updateDb(dbId, (d) => { const o = d.properties.find((x) => x.id === propId)?.options?.find((x) => x.id === optId); if (o) fn(o); });
-  const rowsWith = (dbId: string, propId: string, optId: string) => Object.values(pages).filter((r) => r.rowOf === dbId && !r.trashed
-    && (Array.isArray(r.props?.[propId]) ? r.props[propId].includes(optId) : r.props?.[propId] === optId));
-  const remove = (dbId: string, propId: string, optId: string, withRows: boolean) => {
-    const rows = rowsWith(dbId, propId, optId);
-    if (withRows) rows.forEach((r) => trashPage(r.id));
-    update((d) => {
-      const prop = d.dbs[dbId]?.properties.find((x) => x.id === propId);
-      if (prop) prop.options = (prop.options || []).filter((o) => o.id !== optId);
-      if (!withRows) rows.forEach((r) => {
-        const x = d.pages[r.id];
-        if (!x.props) return;
-        const v = x.props[propId];
-        x.props[propId] = Array.isArray(v) ? v.filter((id: string) => id !== optId) : null;
-      });
-    });
-    onDeleted(optId);
-    setConfirm(null);
-    if (only) onClose();
-  };
-  return (
-    <Popover anchor={anchor} onClose={onClose} width={340}>
-      <div className="pl-tagmanage">
-        <div className="strong small">{only ? '編輯標籤' : '管理標籤'}</div>
-        {usable.filter(({ src }) => !only || src.id === only.srcId).map(({ src, tp }) => (
-          <div key={src.id} className="pl-tagmanage-group">
-            {usable.length > 1 && !only && <div className="pl-tagmenu-src"><span className="pl-src-dot" style={{ background: `var(--c-${src.color})` }} /> {sourceName(src)}{tp && <span className="muted">・{tp.name}</span>}</div>}
-            {!(tp?.options || []).length && <div className="muted small">沒有標籤</div>}
-            {tp && (tp.options || []).filter((o) => !only || o.id === only.optId).map((o) => {
-              const key = src.id + o.id;
-              const isConfirm = confirm?.srcId === src.id && confirm.optId === o.id;
-              const n = isConfirm ? rowsWith(src.dbId, tp.id, o.id).length : 0;
-              return (
-                <div key={o.id}>
-                  <div className="pl-tagmanage-row">
-                    <button className={`pl-color-dot tag-${o.color}`} title="換顏色" aria-label={`${o.name}的顏色`} onClick={() => setColorOf(colorOf === key ? null : key)} />
-                    <TagNameInput value={o.name} onChange={(v) => {
-                      // events named after the tag follow the new name
-                      const rows = rowsWith(src.dbId, tp.id, o.id).filter((r) => r.title === o.name);
-                      update((d) => {
-                        const x = d.dbs[src.dbId]?.properties.find((y) => y.id === tp.id)?.options?.find((y) => y.id === o.id);
-                        if (x) x.name = v;
-                        rows.forEach((r) => { if (d.pages[r.id]) d.pages[r.id].title = v; });
-                      });
-                    }} />
-                    <button className="btn-icon xs" title="刪除標籤" aria-label={`刪除${o.name}`} onClick={() => setConfirm({ srcId: src.id, optId: o.id })}><Icon.trash size={13} /></button>
-                  </div>
-                  {colorOf === key && (
-                    <div className="pl-swatches pl-tag-swatches">
-                      {COLORS.map((c) => (
-                        <button key={c} className={`pl-swatch tag-${c}` + (o.color === c ? ' on' : '')} title={COLOR_NAMES[c]} aria-label={COLOR_NAMES[c]}
-                          onClick={() => { setOpt(src.dbId, tp.id, o.id, (x) => { x.color = c; }); setColorOf(null); }} />
-                      ))}
-                    </div>
-                  )}
-                  {isConfirm && (
-                    <div className="pl-tag-confirm">
-                      <div className="small">刪除「{o.name}」？{n > 0 && `月曆上已加上 ${n} 個。`}</div>
-                      <div className="pl-edit-row">
-                        {n > 0 && <button className="btn-outline sm danger" onClick={() => remove(src.dbId, tp.id, o.id, true)}>連同 {n} 個行程一起刪除</button>}
-                        <button className="btn-outline sm" onClick={() => remove(src.dbId, tp.id, o.id, false)}>{n > 0 ? '只刪標籤，保留行程' : '刪除'}</button>
-                        <button className="btn-ghost sm" onClick={() => setConfirm(null)}>取消</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-        {only && <button className="btn-ghost sm muted" style={{ alignSelf: 'flex-start' }} onClick={(e) => { e.stopPropagation(); onClose(); setTimeout(() => (document.querySelector('.pl-tagbar-manage') as HTMLElement | null)?.click(), 0); }}>管理全部標籤…</button>}
-        {!only && <>
-        <div className="menu-row" style={{ padding: 0, gap: 6 }}>
-          <span className="muted small">新標籤存到</span>
-          <select className="select-sm" aria-label="新標籤存到" value={tt?.id || ''} onChange={(e) => {
-            if (e.target.value === '__new') createTagDatabase(page);
-            else updatePlanner(page.id, (pl) => { pl.tagTo = e.target.value; });
-          }}>
-            {all.map((s) => <option key={s.id} value={s.id}>{sourceName(s)}</option>)}
-            <option value="__new">＋ 建立新的資料表</option>
-          </select>
-        </div>
-        <div className="muted small">標籤會存成資料表裡的一列，可以按上方的資料來源開啟資料庫查看。</div>
-        </>}
-      </div>
-    </Popover>
-  );
-}
-
-/** name input that saves when you leave it (IME-safe) */
-function TagNameInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
-  const save = () => { const t = v.trim(); if (t && t !== value) onChange(t); else setV(value); };
-  return <input className="input sm" value={v} aria-label="標籤名稱" onChange={(e) => setV(e.target.value)} onBlur={save}
-    onKeyDown={(e) => { if (!isImeKey(e) && e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />;
-}
-
-const freshSource = (pageId: string, id: string) => getState().pages[pageId]?.planner?.sources?.find((s) => s.id === id);
-
-/** row of tags above the calendar: pick one, then click time slots to stamp it on */
-function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; brush: Brush | null; setBrush: (b: Brush | null) => void }) {
-  const usable = useUsableSources(page, w);
+  const targets = widgetSources(page, w).filter((s) => sourceDateProp(dbs[s.dbId], s));
   const target = tagTarget(page, w);
-  const [adding, setAdding] = useState(false);
-  const [manage, setManage] = useState<HTMLElement | null>(null);
-  const [editOne, setEditOne] = useState<{ anchor: HTMLElement; tag: Brush } | null>(null);
-  const [name, setName] = useState('');
-  if (!usable.length) return null;
-  const create = () => {
-    if (!target || !name.trim()) return;
-    const id = createTag(page.id, target, name);
-    setName('');
-    setAdding(false);
-    if (id) setBrush({ srcId: target.id, optId: id });
+  return {
+    usable: targets.map((src) => ({ src, tp: sourceTagProp(dbs[src.dbId], src) })),
+    target,
+    targets,
+    setTarget: (id) => { if (id === '__new') createTagDatabase(page); else updatePlanner(page.id, (pl) => { pl.tagTo = id; }); },
+    fresh: (id) => getState().pages[page.id]?.planner?.sources?.find((s) => s.id === id),
+    createTag: (name) => target ? createTagOption(target, name, (pid) => updateSource(page.id, target.id, (x) => { x.tagProp = pid; })) : null,
   };
-  const current = brush && usable.find((u) => u.src.id === brush.srcId)?.tp?.options?.find((o) => o.id === brush.optId);
-  return (
-    <div className="pl-tagbar">
-      <span className="pl-tagbar-label">快速標籤</span>
-      {usable.map(({ src, tp }) => (
-        <React.Fragment key={src.id}>
-          {usable.length > 1 && (tp?.options?.length || 0) > 0 && <span className="pl-src-dot" title={sourceName(src)} style={{ background: `var(--c-${src.color})` }} />}
-          {(tp?.options || []).map((o) => {
-            const on = brush?.srcId === src.id && brush.optId === o.id;
-            return (
-              <span key={o.id} className="pl-tag-wrap">
-                <button className={`tag tag-${o.color} pl-tag-pill` + (on ? ' on' : '')} aria-pressed={on}
-                  title={on ? '再按一次結束（按右鍵可編輯或刪除）' : `選取後，點月曆上的時段就會加上「${o.name}」（按右鍵可編輯或刪除）`}
-                  onClick={() => setBrush(on ? null : { srcId: src.id, optId: o.id })}
-                  onContextMenu={(e) => { e.preventDefault(); setEditOne({ anchor: e.currentTarget, tag: { srcId: src.id, optId: o.id } }); }}>{o.name}</button>
-                <button className="pl-tag-edit" title={`編輯或刪除「${o.name}」`} aria-label={`編輯${o.name}`}
-                  onClick={(e) => setEditOne({ anchor: e.currentTarget.previousElementSibling as HTMLElement, tag: { srcId: src.id, optId: o.id } })}>
-                  <Icon.more size={12} />
-                </button>
-              </span>
-            );
-          })}
-        </React.Fragment>
-      ))}
-      {target && (adding ? (
-        <input className="input sm pl-tagbar-input" autoFocus placeholder="標籤名稱，按 Enter" value={name} aria-label="新增標籤"
-          onChange={(e) => setName(e.target.value)} onBlur={() => { if (!name.trim()) setAdding(false); }}
-          onKeyDown={(e) => {
-            if (isImeKey(e)) return;
-            if (e.key === 'Enter') { e.preventDefault(); create(); }
-            if (e.key === 'Escape') { setName(''); setAdding(false); }
-          }} />
-      ) : (
-        <button className="btn-ghost sm muted" onClick={() => setAdding(true)}><Icon.plus size={12} /> 新增標籤</button>
-      ))}
-      {usable.some((u) => u.tp) && <button className="btn-ghost sm muted pl-tagbar-manage" onClick={(e) => setManage(e.currentTarget)}><Icon.edit size={12} /> 管理標籤</button>}
-      {editOne && <ManageTags page={page} w={w} anchor={editOne.anchor} only={editOne.tag} onClose={() => setEditOne(null)} onDeleted={(id) => { if (brush?.optId === id) setBrush(null); }} />}
-      {manage && <ManageTags page={page} w={w} anchor={manage} onClose={() => setManage(null)} onDeleted={(id) => { if (brush?.optId === id) setBrush(null); }} />}
-      {current
-        ? <span className="pl-tagbar-hint">點月曆上的時段加上「{current.name}」，再點一次就移除 · 按 Esc 結束</span>
-        : usable.some((u) => u.tp?.options?.length) && <span className="pl-tagbar-hint muted">選一個標籤，再點月曆上的時段</span>}
-    </div>
-  );
-}
-
-/** menu from a day / slot "+": add one of the tags there, or a detailed event */
-function TagMenu({ page, w, day, slots, si, anchor, onClose }: {
-  page: Page; w: PlannerWidget; day: string; slots: Slot[]; si: number | null; anchor: HTMLElement; onClose: () => void;
-}) {
-  const usable = useUsableSources(page, w);
-  const target = tagTarget(page, w);
-  const evTarget = targetSource(page, w);
-  const [name, setName] = useState('');
-  const span = si != null ? slotAddSpan(slots, si) : null;
-  const spanStr = span ? [hm(span[0]), hm(span[1])] as [string, string] : null;
-  const add = (srcId: string, optId: string) => { const src = freshSource(page.id, srcId); if (src) addTaggedEvent(src, day, optId, spanStr); onClose(); };
-  const d = toDate(day);
-  return (
-    <Popover anchor={anchor} onClose={onClose} width={280}>
-      <div className="pl-tagmenu">
-        <div className="muted small">{d.getMonth() + 1}/{d.getDate()} 週{WD[d.getDay()]}{si != null && ` · ${slots[si].label}（${spanStr!.join('–')}）`}</div>
-        {usable.map(({ src, tp }) => (
-          <div key={src.id} className="pl-tagmenu-group">
-            {usable.length > 1 && <div className="pl-tagmenu-src"><span className="pl-src-dot" style={{ background: `var(--c-${src.color})` }} /> {sourceName(src)}</div>}
-            {(tp?.options || []).length > 0
-              ? <div className="pl-tag-pills">{tp!.options!.map((o) => <button key={o.id} className={`tag tag-${o.color} pl-tag-pill`} onClick={() => add(src.id, o.id)}>{o.name}</button>)}</div>
-              : <div className="muted small">還沒有標籤，在下面輸入名稱就能建立。</div>}
-          </div>
-        ))}
-        {target && (
-          <input className="input sm" placeholder="新增標籤並加上，按 Enter" value={name} aria-label="新增標籤" autoFocus={!usable.some((u) => u.tp?.options?.length)}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (isImeKey(e) || e.key !== 'Enter' || !name.trim()) return;
-              e.preventDefault();
-              const id = createTag(page.id, target, name);
-              if (id) add(target.id, id);
-            }} />
-        )}
-        {evTarget && (
-          <button className="menu-item pl-tagmenu-more" onClick={() => { onClose(); addEvent(evTarget, day, spanStr?.[0], spanStr?.[1]); }}>
-            <Icon.plus size={13} /> 其他行程（填寫詳細內容）
-          </button>
-        )}
-      </div>
-    </Popover>
-  );
 }
 
 export function MonthWidget(p: WidgetProps) {
@@ -585,7 +240,8 @@ export function MonthWidget(p: WidgetProps) {
   while (cells.length % 7) cells.push(null);
   const monthDays = useMemo(() => cells.filter(Boolean) as string[], [p.pkey]); // eslint-disable-line
   const events = useSourceEvents(p.page, p.w, monthDays);
-  const usable = useUsableSources(p.page, p.w);
+  const ctx = usePlannerTagCtx(p.page, p.w);
+  const usable = ctx.usable;
   const target = targetSource(p.page, p.w);
   const today = todayIso();
   const showTime = !p.w.opts?.hideTime;
@@ -595,15 +251,9 @@ export function MonthWidget(p: WidgetProps) {
   // optional split of every day into slots such as 上午／下午／晚上
   const daySlots: Slot[] = p.w.opts?.slotMode === 'custom' ? (p.w.opts.slots || []) : [];
   const ns = daySlots.length;
-  const ranges = daySlots.map((_, i) => slotPlaceRange(daySlots, i));
   const slotOf = (ev: Ev, iso: string): string | null => {
-    if (!ns || !hasTime(ev.d.start) || datePart(ev.d.start) !== iso) return null;
-    const [h, m] = timePart(ev.d.start).split(':').map(Number);
-    const t = h * 60 + m;
-    // the narrowest slot that holds the time (17:30 goes to 傍晚 rather than 下午)
-    let best = -1;
-    ranges.forEach((r, i) => { if (t >= r[0] && t < r[1] && (best < 0 || r[1] - r[0] < ranges[best][1] - ranges[best][0])) best = i; });
-    return best >= 0 ? daySlots[best].id : null;
+    const i = slotIndexOf(daySlots, ev.d, iso);
+    return i >= 0 ? daySlots[i].id : null;
   };
 
   useEffect(() => {
@@ -616,13 +266,12 @@ export function MonthWidget(p: WidgetProps) {
   /** stamping with the chosen tag: add it to the day / slot, or take it off when it is already there */
   const stamp = (iso: string, si: number | null) => {
     if (!brush) return;
-    const src = freshSource(p.page.id, brush.srcId);
+    const src = ctx.fresh(brush.srcId);
     if (!src) { setBrush(null); return; }
     const here = events.filter((e) => e.src.id === src.id && e.tags.some((o) => o.id === brush.optId) && daysCovered(e.d).includes(iso)
       && (si == null ? !slotOf(e, iso) || !ns : slotOf(e, iso) === daySlots[si].id));
     if (here.length) { here.forEach((e) => trashPage(e.row.id)); return; }
-    const span = si != null ? slotAddSpan(daySlots, si) : null;
-    addTaggedEvent(src, iso, brush.optId, span ? [hm(span[0]), hm(span[1])] : null);
+    stampTag(ctx, brush, iso, si != null ? slotAddPair(daySlots, si) : null);
   };
   const removable = (e: Ev) => !p.readOnly && e.tags.length > 0;
   const chip = (e: Ev, iso: string) => (
@@ -654,7 +303,7 @@ export function MonthWidget(p: WidgetProps) {
   };
   return (
     <>
-      {!p.readOnly && !p.w.opts?.hideTagBar && <TagBar page={p.page} w={p.w} brush={brush} setBrush={setBrush} />}
+      {!p.readOnly && !p.w.opts?.hideTagBar && <TagBar ctx={ctx} brush={brush} setBrush={setBrush} />}
       <div className={'pl-month' + (ns ? ' slotted' : '') + (brush ? ' brushing' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={grid.onKeyDown} onCopy={grid.onCopy} onCut={grid.onCut} onPaste={grid.onPaste}
         style={{ gridTemplateRows: `auto repeat(${cells.length / 7}, minmax(${ns ? 26 + ns * 26 : 84}px, 1fr))` }}
         onMouseDown={(e) => {
@@ -707,20 +356,10 @@ export function MonthWidget(p: WidgetProps) {
           );
         })}
       </div>
-      {menu && <TagMenu page={p.page} w={p.w} day={menu.day} slots={daySlots} si={menu.si} anchor={menu.anchor} onClose={() => setMenu(null)} />}
+      {menu && <TagMenu ctx={ctx} day={menu.day} slots={daySlots} si={menu.si} anchor={menu.anchor} onClose={() => setMenu(null)}
+        onOther={target ? (day, span) => addEvent(target, day, span?.[0], span?.[1]) : undefined} />}
     </>
   );
-}
-
-/** time range (minutes) a slot name usually means, used to place timed events */
-function slotRange(label: string): [number, number] | null {
-  const l = label.toLowerCase();
-  if (/清晨|早晨|早上|上午|morning|\bam\b/.test(l)) return [0, 12 * 60];
-  if (/中午|午餐|noon|lunch/.test(l)) return [11 * 60, 14 * 60];
-  if (/下午|afternoon|\bpm\b/.test(l)) return [12 * 60, 18 * 60];
-  if (/傍晚|dusk/.test(l)) return [17 * 60, 19 * 60];
-  if (/晚上|夜|evening|night/.test(l)) return [18 * 60, 24 * 60];
-  return null;
 }
 
 /* ---------------- time slots ---------------- */
