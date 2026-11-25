@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { isImeKey } from '../../ime';
 import type { Database, Page, Property, View } from '../../types';
 import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
 import { openPeek } from '../../ui';
@@ -353,7 +354,7 @@ export function BoardView({ db, view, rows, newRow }: VP) {
           <input className="input sm" autoFocus placeholder="群組名稱" value={groupName} onChange={(e) => setGroupName(e.target.value)}
             onBlur={() => { setAdding(false); setGroupName(''); }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && groupName.trim()) {
+              if ((e.key === 'Enter' && !isImeKey(e)) && groupName.trim()) {
                 const opt = { id: uid(), name: groupName.trim(), color: COLORS[1 + Math.floor(Math.random() * 9)] };
                 updateDb(db.id, (d) => { const p = d.properties.find((x) => x.id === prop.id)!; p.options = [...(p.options || []), opt]; });
                 setGroupName('');

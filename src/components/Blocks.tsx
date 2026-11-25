@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isImeKey } from '../ime';
 import katex from 'katex';
 import type { Block } from '../types';
 import { useStore } from '../store';
@@ -59,7 +60,7 @@ function UrlInput({ placeholder, button, onSubmit, upload }: { placeholder: stri
       ) : (
         <div style={{ display: 'flex', gap: 8, marginTop: upload ? 8 : 0 }}>
           <input className="input" placeholder={placeholder} value={v} onChange={(e) => setV(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && v.trim()) onSubmit(v.trim()); }} />
+            onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e)) && v.trim()) onSubmit(v.trim()); }} />
           <button className="btn-primary" onClick={() => v.trim() && onSubmit(v.trim())}>{button}</button>
         </div>
       )}
@@ -174,7 +175,7 @@ function EquationBlock({ block, update, readOnly }: Props) {
       {editing && (
         <div className="eq-editor">
           <textarea className="input mono" autoFocus rows={3} value={val} placeholder="E = mc^2" onChange={(e) => setVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); update({ html: val }); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
+            onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e)) && !e.shiftKey) { e.preventDefault(); update({ html: val }); setEditing(false); } if (e.key === 'Escape') setEditing(false); }} />
           <div className="eq-actions">
             <span className="muted small">Enter 完成，Shift+Enter 換行</span>
             <button className="btn-primary sm" onClick={() => { update({ html: val }); setEditing(false); }}>完成</button>

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isImeKey } from '../ime';
 import { createPortal } from 'react-dom';
 import type { BlockType } from '../types';
 import { setBlocks, getState } from '../store';
@@ -201,7 +202,7 @@ export function FormatToolbar() {
       {mode === 'link' ? (
         <div className="ft-link">
           <input className="input sm" autoFocus placeholder="貼上連結或留空以移除" value={url} onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitLink(); } if (e.key === 'Escape') { setMode('main'); setTb(null); } }} />
+            onKeyDown={(e) => { if ((e.key === 'Enter' && !isImeKey(e))) { e.preventDefault(); submitLink(); } if (e.key === 'Escape') { setMode('main'); setTb(null); } }} />
           <button className="btn-primary sm" onClick={submitLink}>{url.trim() ? '確定' : '移除'}</button>
         </div>
       ) : (
