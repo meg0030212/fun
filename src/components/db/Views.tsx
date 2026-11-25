@@ -4,14 +4,15 @@ import type { Database, Page, Property, View } from '../../types';
 import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
 import { openPeek } from '../../ui';
 import { COLORS, htmlToText, monthLabel, uid } from '../../utils';
-import { handleGridKey } from '../../gridNav';
+import { handleGridKey, useGrid } from '../../gridNav';
+import { isRocEra } from '../../utils';
 import { DateVal, datePart, daysCovered, endTime, formatTime, hasTime, moveDate, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Icon } from '../Icons';
 import { MenuItem, Popover, MenuSep } from '../Popover';
 import { PageIcon, coverStyle } from '../EmojiPicker';
 import { AddPropertyMenu, Chip, PropIcon, PropValue, PropertyMenu, StatusChip } from './Property';
 import { CALCS, calculate, displayText, getValue, isEmpty, visibleProps } from './dbutils';
-import { applyFill, canFill, seriesValue } from './fill';
+import { applyFill, canFill, seriesValue, writeCells } from './fill';
 
 interface VP {
   db: Database;
@@ -116,6 +117,11 @@ export function TableView({ db, view, rows, newRow }: VP) {
     return displayText(fake, prop);
   };
   const extraRows = fill && fill.to > rows.length - 1 ? fill.to - (rows.length - 1) : 0;
+  const grid = useGrid({
+    get: (r, c) => (rows[r] && props[c] ? displayText(rows[r], props[c]) : ''),
+    apply: (changes) => writeCells(db, changes.filter((x) => rows[x.r] && props[x.c]).map((x) => ({ row: rows[x.r], prop: props[x.c], text: x.v })),
+      isRocEra() || props.some((p) => p.dateFormat === 'roc' || p.dateFormat === 'roc-slash')),
+  });
   const width = (p: Property) => liveWidths[p.id] ?? view.widths[p.id] ?? (p.type === 'title' ? 280 : 180);
 
   const startResize = (e: React.MouseEvent, p: Property) => {
@@ -139,7 +145,7 @@ export function TableView({ db, view, rows, newRow }: VP) {
 
   return (
     <div className="tbl-scroll">
-      <div className="tbl" ref={tblRef} style={{ minWidth: total + 40 }} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}
+      <div className="tbl" ref={tblRef} style={{ minWidth: total + 40 }} {...grid}
         onFocusCapture={(e) => {
           const c = (e.target as HTMLElement).closest<HTMLElement>('[data-gc]');
           if (c) setActive({ ri: Number(c.dataset.gr), ci: Number(c.dataset.gc) });
