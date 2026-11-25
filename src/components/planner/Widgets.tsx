@@ -1,8 +1,8 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Database, Page, PlannerSource, PlannerWidget, Property, SelectOption } from '../../types';
-import { addRow, createDatabasePage, getState, makeProp, patchPage, trashPage, updateDb, useStore } from '../../store';
+import { addRow, createDatabasePage, getState, makeProp, patchPage, trashPage, update, updateDb, useStore } from '../../store';
 import { navigate, openPeek } from '../../ui';
-import { COLORS, uid } from '../../utils';
+import { COLORS, COLOR_NAMES, uid } from '../../utils';
 import { Popover } from '../Popover';
 import { DateVal, datePart, daysCovered, formatTime, hasTime, parseDateValue, timePart, toDate, toLocalIso } from '../../dates';
 import { addSource, slotsOf, updateEntry, updatePlanner, updateSource } from '../../planner';
@@ -340,13 +340,134 @@ function useUsableSources(page: Page, w: PlannerWidget) {
   return widgetSources(page, w).filter((s) => sourceDateProp(dbs[s.dbId], s)).map((src) => ({ src, tp: sourceTagProp(dbs[src.dbId], src) }));
 }
 
+/** the source new quick tags go to: the planner's tag source if this block shows it, else the usual target */
+export function tagTarget(page: Page, w: PlannerWidget): PlannerSource | undefined {
+  const list = widgetSources(page, w);
+  return list.find((s) => s.id === page.planner?.tagTo) || targetSource(page, w);
+}
+
+/** create a new database just for quick tags and make it the tag source */
+function createTagDatabase(page: Page): string {
+  const pid = createDatabasePage(page.id, 'table', false);
+  const dbId = getState().pages[pid].dbId!;
+  patchPage(pid, { title: `${page.title || '手帳'} · 時段標籤`, icon: '🏷️' }, 'silent');
+  const id = addSource(page.id, dbId, { name: '時段標籤' });
+  updatePlanner(page.id, (pl) => { pl.tagTo = id; });
+  return id;
+}
+
+/** rename / recolour / delete tags, and choose where new tags are kept */
+function ManageTags({ page, w, anchor, onClose, onDeleted }: { page: Page; w: PlannerWidget; anchor: HTMLElement; onClose: () => void; onDeleted: (optId: string) => void }) {
+  const dbs = useStore((s) => s.dbs);
+  const pages = useStore((s) => s.pages);
+  const usable = useUsableSources(page, w);
+  const all = widgetSources(page, w).filter((s) => sourceDateProp(dbs[s.dbId], s));
+  const tt = tagTarget(page, w);
+  const [confirm, setConfirm] = useState<{ srcId: string; optId: string } | null>(null);
+  const [colorOf, setColorOf] = useState<string | null>(null);
+  const setOpt = (dbId: string, propId: string, optId: string, fn: (o: SelectOption) => void) =>
+    updateDb(dbId, (d) => { const o = d.properties.find((x) => x.id === propId)?.options?.find((x) => x.id === optId); if (o) fn(o); });
+  const rowsWith = (dbId: string, propId: string, optId: string) => Object.values(pages).filter((r) => r.rowOf === dbId && !r.trashed
+    && (Array.isArray(r.props?.[propId]) ? r.props[propId].includes(optId) : r.props?.[propId] === optId));
+  const remove = (dbId: string, propId: string, optId: string, withRows: boolean) => {
+    const rows = rowsWith(dbId, propId, optId);
+    if (withRows) rows.forEach((r) => trashPage(r.id));
+    update((d) => {
+      const prop = d.dbs[dbId]?.properties.find((x) => x.id === propId);
+      if (prop) prop.options = (prop.options || []).filter((o) => o.id !== optId);
+      if (!withRows) rows.forEach((r) => {
+        const x = d.pages[r.id];
+        if (!x.props) return;
+        const v = x.props[propId];
+        x.props[propId] = Array.isArray(v) ? v.filter((id: string) => id !== optId) : null;
+      });
+    });
+    onDeleted(optId);
+    setConfirm(null);
+  };
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={340}>
+      <div className="pl-tagmanage">
+        <div className="strong small">管理標籤</div>
+        {usable.map(({ src, tp }) => (
+          <div key={src.id} className="pl-tagmanage-group">
+            {usable.length > 1 && <div className="pl-tagmenu-src"><span className="pl-src-dot" style={{ background: `var(--c-${src.color})` }} /> {sourceName(src)}{tp && <span className="muted">・{tp.name}</span>}</div>}
+            {!(tp?.options || []).length && <div className="muted small">沒有標籤</div>}
+            {tp && (tp.options || []).map((o) => {
+              const key = src.id + o.id;
+              const isConfirm = confirm?.srcId === src.id && confirm.optId === o.id;
+              const n = isConfirm ? rowsWith(src.dbId, tp.id, o.id).length : 0;
+              return (
+                <div key={o.id}>
+                  <div className="pl-tagmanage-row">
+                    <button className={`pl-color-dot tag-${o.color}`} title="換顏色" aria-label={`${o.name}的顏色`} onClick={() => setColorOf(colorOf === key ? null : key)} />
+                    <TagNameInput value={o.name} onChange={(v) => {
+                      // events named after the tag follow the new name
+                      const rows = rowsWith(src.dbId, tp.id, o.id).filter((r) => r.title === o.name);
+                      update((d) => {
+                        const x = d.dbs[src.dbId]?.properties.find((y) => y.id === tp.id)?.options?.find((y) => y.id === o.id);
+                        if (x) x.name = v;
+                        rows.forEach((r) => { if (d.pages[r.id]) d.pages[r.id].title = v; });
+                      });
+                    }} />
+                    <button className="btn-icon xs" title="刪除標籤" aria-label={`刪除${o.name}`} onClick={() => setConfirm({ srcId: src.id, optId: o.id })}><Icon.trash size={13} /></button>
+                  </div>
+                  {colorOf === key && (
+                    <div className="pl-swatches pl-tag-swatches">
+                      {COLORS.map((c) => (
+                        <button key={c} className={`pl-swatch tag-${c}` + (o.color === c ? ' on' : '')} title={COLOR_NAMES[c]} aria-label={COLOR_NAMES[c]}
+                          onClick={() => { setOpt(src.dbId, tp.id, o.id, (x) => { x.color = c; }); setColorOf(null); }} />
+                      ))}
+                    </div>
+                  )}
+                  {isConfirm && (
+                    <div className="pl-tag-confirm">
+                      <div className="small">刪除「{o.name}」？{n > 0 && `月曆上已加上 ${n} 個。`}</div>
+                      <div className="pl-edit-row">
+                        {n > 0 && <button className="btn-outline sm danger" onClick={() => remove(src.dbId, tp.id, o.id, true)}>連同 {n} 個行程一起刪除</button>}
+                        <button className="btn-outline sm" onClick={() => remove(src.dbId, tp.id, o.id, false)}>{n > 0 ? '只刪標籤，保留行程' : '刪除'}</button>
+                        <button className="btn-ghost sm" onClick={() => setConfirm(null)}>取消</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        <div className="menu-row" style={{ padding: 0, gap: 6 }}>
+          <span className="muted small">新標籤存到</span>
+          <select className="select-sm" aria-label="新標籤存到" value={tt?.id || ''} onChange={(e) => {
+            if (e.target.value === '__new') createTagDatabase(page);
+            else updatePlanner(page.id, (pl) => { pl.tagTo = e.target.value; });
+          }}>
+            {all.map((s) => <option key={s.id} value={s.id}>{sourceName(s)}</option>)}
+            <option value="__new">＋ 建立新的資料表</option>
+          </select>
+        </div>
+        <div className="muted small">標籤會存成資料表裡的一列，可以按上方的資料來源開啟資料庫查看。</div>
+      </div>
+    </Popover>
+  );
+}
+
+/** name input that saves when you leave it (IME-safe) */
+function TagNameInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  const save = () => { const t = v.trim(); if (t && t !== value) onChange(t); else setV(value); };
+  return <input className="input sm" value={v} aria-label="標籤名稱" onChange={(e) => setV(e.target.value)} onBlur={save}
+    onKeyDown={(e) => { if (!isImeKey(e) && e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />;
+}
+
 const freshSource = (pageId: string, id: string) => getState().pages[pageId]?.planner?.sources?.find((s) => s.id === id);
 
 /** row of tags above the calendar: pick one, then click time slots to stamp it on */
 function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; brush: Brush | null; setBrush: (b: Brush | null) => void }) {
   const usable = useUsableSources(page, w);
-  const target = targetSource(page, w);
+  const target = tagTarget(page, w);
   const [adding, setAdding] = useState(false);
+  const [manage, setManage] = useState<HTMLElement | null>(null);
   const [name, setName] = useState('');
   if (!usable.length) return null;
   const create = () => {
@@ -384,6 +505,8 @@ function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; br
       ) : (
         <button className="btn-ghost sm muted" onClick={() => setAdding(true)}><Icon.plus size={12} /> 新增標籤</button>
       ))}
+      {usable.some((u) => u.tp) && <button className="btn-ghost sm muted" onClick={(e) => setManage(e.currentTarget)}><Icon.edit size={12} /> 管理標籤</button>}
+      {manage && <ManageTags page={page} w={w} anchor={manage} onClose={() => setManage(null)} onDeleted={(id) => { if (brush?.optId === id) setBrush(null); }} />}
       {current
         ? <span className="pl-tagbar-hint">點月曆上的時段加上「{current.name}」，再點一次就移除 · 按 Esc 結束</span>
         : usable.some((u) => u.tp?.options?.length) && <span className="pl-tagbar-hint muted">選一個標籤，再點月曆上的時段</span>}
@@ -396,7 +519,8 @@ function TagMenu({ page, w, day, slots, si, anchor, onClose }: {
   page: Page; w: PlannerWidget; day: string; slots: Slot[]; si: number | null; anchor: HTMLElement; onClose: () => void;
 }) {
   const usable = useUsableSources(page, w);
-  const target = targetSource(page, w);
+  const target = tagTarget(page, w);
+  const evTarget = targetSource(page, w);
   const [name, setName] = useState('');
   const span = si != null ? slotAddSpan(slots, si) : null;
   const spanStr = span ? [hm(span[0]), hm(span[1])] as [string, string] : null;
@@ -424,8 +548,8 @@ function TagMenu({ page, w, day, slots, si, anchor, onClose }: {
               if (id) add(target.id, id);
             }} />
         )}
-        {target && (
-          <button className="menu-item pl-tagmenu-more" onClick={() => { onClose(); addEvent(target, day, spanStr?.[0], spanStr?.[1]); }}>
+        {evTarget && (
+          <button className="menu-item pl-tagmenu-more" onClick={() => { onClose(); addEvent(evTarget, day, spanStr?.[0], spanStr?.[1]); }}>
             <Icon.plus size={13} /> 其他行程（填寫詳細內容）
           </button>
         )}
