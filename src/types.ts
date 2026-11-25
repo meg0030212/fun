@@ -200,6 +200,8 @@ export interface Planner {
   sources?: PlannerSource[];
   /** source that new events are added to */
   addTo?: string;
+  /** source that new quick tags are created in (default: addTo) */
+  tagTo?: string;
 }
 
 /** a database linked into a planner, optionally narrowed by filters (e.g. 類別 是 工作) */
