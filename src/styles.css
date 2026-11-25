@@ -1273,3 +1273,62 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .pl-tag-edit { position: absolute; right: -7px; top: -7px; margin: 0; padding: 1px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 50%; opacity: 0; pointer-events: none; z-index: 1; }
 .pl-tag-wrap:hover .pl-tag-edit, .pl-tag-edit:focus-visible { opacity: 1; pointer-events: auto; }
 @media (hover: none) { .pl-tag-edit { opacity: 1; pointer-events: auto; } }
+
+/* =========================================================================
+   Planner in the Notion look: neutral surfaces, no coloured header bars,
+   thin grey dividers, colour kept for tags, events and small accents.
+   ========================================================================= */
+.planner .pl-bar { border-bottom: 1px solid var(--border); padding: 2px 0 8px; margin-bottom: 10px; }
+.planner .pl-period { font-size: 16px; font-weight: 600; }
+.planner .pl-sources { margin: 0 0 16px; }
+.planner .pl-edit-hint { background: var(--bg-hover); color: var(--text-2); }
+.pl-grid { gap: 30px 28px; }
+.pl-card { border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.pl-grid.editing .pl-card { outline: 1px dashed var(--border-strong); outline-offset: 6px; border-radius: 4px; }
+.pl-card-head { background: transparent; border-bottom: 1px solid var(--border); padding: 2px 2px 6px; min-height: 32px; gap: 6px; }
+.pl-card-title { color: var(--text); font-size: 14px; font-weight: 600; }
+.pl-card-title::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--w-accent); opacity: .75; margin-right: 8px; vertical-align: 1px; }
+.pl-card-body { padding: 8px 2px 2px; font-size: 14px; }
+.pl-add-tile { border-radius: 6px; border: 1px dashed var(--border-strong); }
+/* paper patterns stay available, but quieter and only as a soft panel */
+.paper-grid .pl-card-body, .paper-dots .pl-card-body, .paper-lined .pl-card-body { border-radius: 4px; }
+.planner { --pl-line: rgba(55, 53, 47, .06); }
+:root[data-theme="dark"] .planner { --pl-line: rgba(255, 255, 255, .06); }
+.paper-dots .pl-card-body { background-image: radial-gradient(rgba(55, 53, 47, .16) 1px, transparent 1.2px); }
+:root[data-theme="dark"] .paper-dots .pl-card-body { background-image: radial-gradient(rgba(255, 255, 255, .14) 1px, transparent 1.2px); }
+
+/* month block: like the Notion calendar */
+.pl-month { border-top: 1px solid var(--border); border-left: 1px solid var(--border); background: transparent; }
+.pl-month-dow { background: transparent; color: var(--text-3); font-size: 12px; padding: 6px 0; }
+.pl-month-cell { padding: 4px 6px 6px; }
+.pl-month-cell.empty { background: transparent; }
+.pl-month-num { flex-direction: row-reverse; font-weight: 400; font-size: 13px; color: var(--text-2); min-height: 22px; }
+.pl-month-cell.today .pl-month-num span { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; }
+.pl-mslot { border-top: 1px solid var(--border); }
+.pl-mslot-label { color: var(--text-3); font-weight: 500; font-size: 10.5px; }
+.pl-mslot:focus-within { background: var(--bg-hover); }
+.pl-mslot-add { right: 0; }
+
+/* events: flat coloured chips, like Notion tags */
+.pl-event { border-left: 0; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.pl-sch-items .pl-event { padding: 3px 8px; }
+.cal-item.colored { border-left: 0; }
+.wk-event.colored { border-left: 0; }
+
+/* time-slot table */
+.pl-slots { background: transparent; }
+.pl-slots th { background: transparent; color: var(--text-3); font-weight: 500; padding: 6px 4px; border-color: var(--border); }
+.pl-slots th.today { color: var(--red); }
+.pl-slots td { border-color: var(--border); }
+.pl-slots td.today { background: rgba(235, 87, 87, .03); }
+.pl-slots .pl-slot-label { background: transparent; color: var(--text-2); font-weight: 500; }
+
+/* habit tracker */
+.pl-habit { background: transparent; }
+.pl-habit th { color: var(--text-3); }
+.pl-habit td { border-color: var(--border); }
+
+/* schedule list */
+.pl-sch-date { color: var(--text-3); }
+/* calendars and tables sit on a plain surface; paper only behind writing blocks */
+.pl-card-month .pl-card-body, .pl-card-slots .pl-card-body, .pl-card-habit .pl-card-body, .pl-card-schedule .pl-card-body { background-image: none !important; }
