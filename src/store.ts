@@ -229,6 +229,20 @@ export function trashPage(id: string) {
   });
 }
 
+/** move several pages to the trash in one undo step */
+export function trashPages(ids: string[]) {
+  update((d) => {
+    const now = Date.now();
+    ids.forEach((id) => {
+      const p = d.pages[id];
+      if (!p) return;
+      p.trashed = true;
+      p.trashedAt = now;
+      p.favorite = false;
+    });
+  });
+}
+
 export function restorePage(id: string) {
   update((d) => {
     const p = d.pages[id];

@@ -234,9 +234,8 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
     </div>
   );
 
-  const sourceBar = (
-    <div className="pl-sources cal-sources">
-      <span className="pl-sources-label">資料庫</span>
+  const sourceBar = multi && (
+    <div className="cal-sources">
       {all.map((s) => (
         <div key={s.id} className={'pl-src-chip' + (s.hidden ? ' off' : '')} style={{ ['--src' as any]: `var(--c-${s.color})`, ['--src-bg' as any]: `var(--b-${s.color})` }}>
           <button className="pl-src-toggle" title={s.hidden ? '顯示' : '隱藏'} aria-pressed={!s.hidden} aria-label={`顯示${sourceName(s)}`}
@@ -247,7 +246,7 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
           </button>
         </div>
       ))}
-      <button className="btn-ghost sm muted" onClick={(e) => setPop({ kind: 'link', anchor: e.currentTarget })}><Icon.plus size={13} /> 連結其他資料庫</button>
+      <button className="pl-tagbar-icon" title="連結其他資料庫" aria-label="連結其他資料庫" onClick={(e) => setPop({ kind: 'link', anchor: e.currentTarget })}><Icon.plus size={13} /></button>
     </div>
   );
 
@@ -296,7 +295,9 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
             {view.calSlotMode === 'custom' && (
               <SlotEditor slots={view.calSlots || []} onChange={(next) => updateView(db.id, view.id, (v) => { v.calSlots = next; })} />
             )}
-            <div className="muted small">要連結其他資料庫，或選擇顯示哪些資料庫，請用行事曆上方的「資料庫」列。</div>
+            <div className="muted small">資料庫</div>
+            <div className="muted small">把其他資料庫的行程用不同顏色一起顯示在這裡；連結後，上方會出現可以勾選顯示／隱藏的資料庫列。</div>
+            <button className="btn-outline sm" style={{ alignSelf: 'flex-start' }} onClick={(e) => setPop({ kind: 'link', anchor: e.currentTarget })}><Icon.plus size={12} /> 連結其他資料庫</button>
           </div>
         </Popover>
       )}
@@ -315,8 +316,13 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
   const top = (
     <>
       {header}
-      {sourceBar}
-      {!view.calHideTagBar && <TagBar ctx={ctx} brush={brush} setBrush={setBrush} />}
+      {(sourceBar || !view.calHideTagBar) && (
+        <div className="cal-toolbar">
+          {sourceBar}
+          {sourceBar && !view.calHideTagBar && <span className="cal-toolbar-sep" />}
+          {!view.calHideTagBar && <TagBar ctx={ctx} brush={brush} setBrush={setBrush} />}
+        </div>
+      )}
     </>
   );
 

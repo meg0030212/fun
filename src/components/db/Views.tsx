@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { isImeKey } from '../../ime';
 import type { Database, Page, Property, View } from '../../types';
-import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
+import { duplicatePage, makeProp, setRowProp, trashPage, trashPages, update, updateDb, updateView } from '../../store';
+import { toast } from '../../ui';
 import { openPeek } from '../../ui';
 import { COLORS, htmlToText, monthLabel, uid } from '../../utils';
 import { clearRange, getRangeRect, handleGridKey, setRange, useGrid } from '../../gridNav';
@@ -41,6 +42,73 @@ function RowMenu({ row, anchor, onClose }: { row: Page; anchor: HTMLElement; onC
   );
 }
 
+/** floating bar for actions on several rows at once */
+function BatchBar({ db, rows, byTicks, onDelete, onClear, onClearCells }: {
+  db: Database; rows: Page[]; byTicks: boolean; onDelete: () => void; onClear: () => void; onClearCells?: () => void;
+}) {
+  const [setProp, setSetProp] = useState<HTMLElement | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const n = rows.length;
+  return (
+    <div className="batch-bar" role="toolbar" aria-label="批量操作" onMouseDown={(e) => { if (!(e.target as HTMLElement).closest('input, select')) e.preventDefault(); }}>
+      <span className="batch-count">已選取 {n} 列</span>
+      <button className="batch-btn" onClick={(e) => setSetProp(e.currentTarget)}><Icon.edit size={13} /> 設定屬性</button>
+      <button className="batch-btn" onClick={() => { rows.forEach((r) => duplicatePage(r.id)); toast(`已建立 ${n} 列副本`); }}><Icon.duplicate size={13} /> 建立副本</button>
+      {onClearCells && <button className="batch-btn" onClick={onClearCells}><Icon.x size={13} /> 清除內容</button>}
+      {confirm ? (
+        <span className="batch-confirm">
+          確定刪除 {n} 列？
+          <button className="batch-btn danger" onClick={() => { setConfirm(false); onDelete(); }}>刪除</button>
+          <button className="batch-btn" onClick={() => setConfirm(false)}>取消</button>
+        </span>
+      ) : (
+        <button className="batch-btn danger" onClick={() => (n > 1 ? setConfirm(true) : onDelete())}><Icon.trash size={13} /> 刪除</button>
+      )}
+      <button className="batch-close" title={byTicks ? '取消選取（Esc）' : '取消選取'} aria-label="取消選取" onClick={onClear}><Icon.x size={14} /></button>
+      {setProp && <BatchSetProp db={db} rows={rows} anchor={setProp} onClose={() => setSetProp(null)} />}
+    </div>
+  );
+}
+
+/** set one property to the same value on every selected row */
+function BatchSetProp({ db, rows, anchor, onClose }: { db: Database; rows: Page[]; anchor: HTMLElement; onClose: () => void }) {
+  const editable = db.properties.filter((p) => !['formula', 'created_time', 'last_edited_time'].includes(p.type));
+  const [propId, setPropId] = useState(editable.find((p) => p.type !== 'title')?.id || editable[0]?.id || '');
+  const [text, setText] = useState('');
+  const prop = editable.find((p) => p.id === propId);
+  const apply = (value: string) => {
+    if (!prop) return;
+    writeCells(db, rows.map((row) => ({ row, prop, text: value })), isRocEra() || prop.dateFormat === 'roc' || prop.dateFormat === 'roc-slash');
+    toast(`已更新 ${rows.length} 列的「${prop.name}」`);
+    onClose();
+  };
+  const choices = prop?.type === 'checkbox' ? [{ name: '勾選', value: 'true', color: 'green' }, { name: '取消勾選', value: '', color: 'gray' }]
+    : prop && ['select', 'status', 'multi_select'].includes(prop.type) ? (prop.options || []).map((o) => ({ name: o.name, value: o.name, color: o.color })) : null;
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={300} placement="top">
+      <div className="pl-form">
+        <div className="strong small">把 {rows.length} 列的屬性設成同一個值</div>
+        <select className="select-sm" aria-label="屬性" value={propId} onChange={(e) => { setPropId(e.target.value); setText(''); }}>
+          {editable.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {choices ? (
+          <div className="pl-tag-pills">
+            {choices.map((c) => <button key={c.name} className={`tag tag-${c.color} pl-tag-pill`} onClick={() => apply(c.value)}>{c.name}</button>)}
+            <button className="btn-ghost sm muted" onClick={() => apply('')}>清空</button>
+          </div>
+        ) : (
+          <div className="pl-edit-row">
+            <input className="input sm" autoFocus value={text} aria-label="新的值" onChange={(e) => setText(e.target.value)}
+              placeholder={prop?.type === 'date' ? '例如 2026-12-01' : prop?.type === 'number' ? '數字' : '輸入內容（留空＝清空）'}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isImeKey(e)) apply(text); }} />
+            <button className="btn-primary sm" onClick={() => apply(text)}>套用</button>
+          </div>
+        )}
+      </div>
+    </Popover>
+  );
+}
+
 /* ============================== TABLE ============================== */
 export function TableView({ db, view, rows, newRow }: VP) {
   const props = visibleProps(db, view);
@@ -56,6 +124,48 @@ export function TableView({ db, view, rows, newRow }: VP) {
   const [fill, setFill] = useState<FillRect | null>(null);
   const [sel, setSel] = useState<{ r0: number; r1: number; c0: number; c1: number } | null>(null);
   const tblRef = useRef<HTMLDivElement>(null);
+  // rows ticked in the gutter (batch actions)
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const lastPick = useRef<number | null>(null);
+  const togglePick = (ri: number, shift: boolean) => {
+    const next = new Set(picked);
+    if (shift && lastPick.current != null) {
+      const [a, b] = [Math.min(lastPick.current, ri), Math.max(lastPick.current, ri)];
+      const on = !picked.has(rows[ri].id);
+      for (let i = a; i <= b; i++) { if (on) next.add(rows[i].id); else next.delete(rows[i].id); }
+    } else if (next.has(rows[ri].id)) next.delete(rows[ri].id); else next.add(rows[ri].id);
+    lastPick.current = ri;
+    setPicked(next);
+  };
+  // rows the batch bar acts on: ticked rows, else the rows a multi-row cell block covers
+  const rangeRows = sel && sel.r1 > sel.r0 ? rows.slice(sel.r0, sel.r1 + 1) : [];
+  const batchRows = picked.size ? rows.filter((r) => picked.has(r.id)) : rangeRows;
+  const clearBatch = () => { setPicked(new Set()); lastPick.current = null; if (tblRef.current) clearRange(tblRef.current); };
+  // drop ticks of rows that disappeared (deleted, filtered out)
+  React.useEffect(() => {
+    if (!picked.size) return;
+    const ids = new Set(rows.map((r) => r.id));
+    if ([...picked].some((id) => !ids.has(id))) setPicked(new Set([...picked].filter((id) => ids.has(id))));
+  }, [rows]); // eslint-disable-line
+  const deleteBatch = () => {
+    const ids = batchRows.map((r) => r.id);
+    if (!ids.length) return;
+    trashPages(ids);
+    clearBatch();
+    toast(`已刪除 ${ids.length} 列（可按 Ctrl+Z 復原）`);
+  };
+  // Delete / Backspace removes ticked rows; Escape clears the ticks
+  React.useEffect(() => {
+    if (!picked.size) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('input, textarea, [contenteditable="true"], .popover')) return;
+      if (e.key === 'Escape') clearBatch();
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBatch(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }); // eslint-disable-line
   // follow the grid's block selection so the fill handle sits on its last cell
   React.useEffect(() => {
     const el = tblRef.current;
@@ -159,7 +269,15 @@ export function TableView({ db, view, rows, newRow }: VP) {
         }}
         onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActive(null); }}>
         <div className="tbl-row tbl-head">
-          <div className="tbl-gutter" />
+          <div className="tbl-gutter">
+            {rows.length > 0 && (
+              <span className={'row-check' + (picked.size === rows.length ? ' on' : picked.size ? ' some' : '')} role="checkbox" aria-checked={picked.size === rows.length}
+                title={picked.size ? '取消全選' : '全選'} aria-label="全選"
+                onClick={() => (picked.size ? clearBatch() : setPicked(new Set(rows.map((r) => r.id))))}>
+                {picked.size === rows.length ? <Icon.check size={11} /> : picked.size ? <span className="row-check-dash" /> : null}
+              </span>
+            )}
+          </div>
           {props.map((p) => (
             <div key={p.id} className={'th' + (dragCol === p.id ? ' dragging' : '')} style={{ width: width(p) }}
               draggable onDragStart={(e) => { setDragCol(p.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); }}
@@ -184,7 +302,7 @@ export function TableView({ db, view, rows, newRow }: VP) {
           <div className="th th-add" onClick={(e) => setAddProp(e.currentTarget as HTMLElement)}><Icon.plus size={14} /></div>
         </div>
         {rows.map((r, ri) => (
-          <div key={r.id} data-ri={ri} className={'tbl-row' + (dragRow === r.id ? ' dragging' : '') + (dropRow?.id === r.id ? (dropRow.after ? ' drop-after' : ' drop-before') : '')}
+          <div key={r.id} data-ri={ri} className={'tbl-row' + (picked.has(r.id) ? ' picked' : '') + (dragRow === r.id ? ' dragging' : '') + (dropRow?.id === r.id ? (dropRow.after ? ' drop-after' : ' drop-before') : '')}
             onDragOver={(e) => {
               if (!dragRow) return;
               e.preventDefault();
@@ -204,6 +322,10 @@ export function TableView({ db, view, rows, newRow }: VP) {
                 onDragStart={(e) => { setDragRow(r.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', r.id); }}
                 onDragEnd={() => { setDragRow(null); setDropRow(null); }}
                 onClick={(e) => setRowMenu({ row: r, anchor: e.currentTarget as HTMLElement })}><Icon.drag size={12} /></span>
+              <span className={'row-check' + (picked.has(r.id) ? ' on' : '')} role="checkbox" aria-checked={picked.has(r.id)} aria-label="選取這一列"
+                title="選取（按住 Shift 可連續選取）" onMouseDown={(e) => e.preventDefault()} onClick={(e) => togglePick(ri, e.shiftKey)}>
+                {picked.has(r.id) && <Icon.check size={11} />}
+              </span>
             </div>
             {props.map((p, ci) => (
               <div key={p.id} className={'td td-' + p.type + (inFill(ri, ci) ? ' fill-preview' : '') + (isFillSource(ri, ci) ? ' fill-source' : '')} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
@@ -246,6 +368,14 @@ export function TableView({ db, view, rows, newRow }: VP) {
       {propMenu && <PropertyMenu db={db} view={view} prop={db.properties.find((p) => p.id === propMenu.prop.id) || propMenu.prop} anchor={propMenu.anchor} onClose={() => setPropMenu(null)} />}
       {addProp && <AddPropertyMenu db={db} anchor={addProp} onClose={() => setAddProp(null)} />}
       {rowMenu && <RowMenu row={rowMenu.row} anchor={rowMenu.anchor} onClose={() => setRowMenu(null)} />}
+      {batchRows.length > 0 && !fill && (
+        <BatchBar db={db} rows={batchRows} byTicks={picked.size > 0} onDelete={deleteBatch} onClear={clearBatch}
+          onClearCells={sel && !picked.size ? () => {
+            const changes: { row: Page; prop: Property; text: string }[] = [];
+            for (let r = sel.r0; r <= sel.r1; r++) for (let c = sel.c0; c <= sel.c1; c++) if (rows[r] && props[c]) changes.push({ row: rows[r], prop: props[c], text: '' });
+            writeCells(db, changes, false);
+          } : undefined} />
+      )}
       {calcMenu && (
         <Popover anchor={calcMenu.anchor} onClose={() => setCalcMenu(null)} width={200} placement="top">
           {Object.entries(CALCS).filter(([, c]) => !c.types || c.types.includes(calcMenu.prop.type)).map(([k, c]) => (
