@@ -155,7 +155,8 @@ export interface WidgetOpts {
   style?: 'check' | 'bullet' | 'number';
   /** slots: how a day is divided */
   slotMode?: 'custom' | 'hourly' | 'none';
-  slots?: { id: string; label: string }[];
+  /** time: optional "HH:mm-HH:mm" the slot covers (used to place and add events) */
+  slots?: { id: string; label: string; time?: string }[];
   startHour?: number;
   endHour?: number;
   step?: 30 | 60;
@@ -163,6 +164,10 @@ export interface WidgetOpts {
   dbId?: string;
   /** month / slots / schedule: which planner sources to show (undefined = all) */
   sourceIds?: string[];
+  /** month / slots / schedule: hide event times such as 13:30 */
+  hideTime?: boolean;
+  /** month: hide the quick tag bar above the calendar */
+  hideTagBar?: boolean;
   /** habit tracker rows */
   habits?: { id: string; name: string }[];
 }
@@ -206,6 +211,8 @@ export interface PlannerSource {
   filters: Filter[];
   /** date property to place rows by (default: first date property) */
   dateProp?: string;
+  /** select / multi-select property used as tags (colours the events, quick-add on the calendar); 'none' = off */
+  tagProp?: string;
   hidden?: boolean;
 }
 

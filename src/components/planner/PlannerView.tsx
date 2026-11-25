@@ -8,7 +8,7 @@ import {
 } from '../../planner';
 import { Icon } from '../Icons';
 import { MenuHeader, MenuItem, MenuSep, Popover } from '../Popover';
-import { WIDGETS, WidgetSourceSelect, SourcePicker, sourceName, dbTitle } from './Widgets';
+import { WIDGETS, WidgetSourceSelect, SourcePicker, sourceName, dbTitle, parseSpan, slotAddText, sourceTagProp } from './Widgets';
 import { addSource, migrateWidgetDbLinks, removeSource, updateSource } from '../../planner';
 import { useStore } from '../../store';
 import { navigate } from '../../ui';
@@ -287,6 +287,11 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
                 {(o.slots || []).map((s, i) => (
                   <div key={s.id} className="pl-edit-row">
                     <input className="input sm" value={s.label} aria-label="時段名稱" onChange={(e) => patch((x) => { x.opts!.slots![i].label = e.target.value; })} />
+                    {w.type === 'month' && (
+                      <input className={'input sm pl-slot-time' + (s.time && !parseSpan(s.time) ? ' invalid' : '')} value={s.time || ''} aria-label={`${s.label}的時間`}
+                        placeholder={slotAddText(o.slots || [], i)} title="這個時段的時間，例如 13:30-17:30；新增的標籤會用這個時間"
+                        onChange={(e) => patch((x) => { x.opts!.slots![i].time = e.target.value || undefined; })} />
+                    )}
                     <button className="btn-icon xs" title="上移" disabled={i === 0} onClick={() => patch((x) => { const a = x.opts!.slots!; [a[i - 1], a[i]] = [a[i], a[i - 1]]; })}>↑</button>
                     <button className="btn-icon xs" title="刪除" onClick={() => patch((x) => { x.opts!.slots = x.opts!.slots!.filter((y) => y.id !== s.id); })}><Icon.x size={12} /></button>
                   </div>
@@ -319,6 +324,10 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
           <>
             <div className="muted small">這個區塊顯示的行程</div>
             <WidgetSourceSelect page={page} w={w} />
+            <label className="pl-src-opt"><input type="checkbox" checked={!o.hideTime} onChange={(e) => patch((x) => { x.opts!.hideTime = !e.target.checked || undefined; })} /> 顯示行程時間（例如 13:30）</label>
+            {w.type === 'month' && (
+              <label className="pl-src-opt"><input type="checkbox" checked={!o.hideTagBar} onChange={(e) => patch((x) => { x.opts!.hideTagBar = !e.target.checked || undefined; })} /> 在月曆上方顯示快速標籤列</label>
+            )}
           </>
         )}
 
@@ -370,6 +379,16 @@ function SourceEditor({ page, srcId, anchor, onClose }: { page: Page; srcId: str
             <span className="muted small">依哪個日期放到手帳上</span>
             <select className="select-sm" value={src.dateProp || dateProps[0].id} onChange={(e) => updateSource(page.id, src.id, (x) => { x.dateProp = e.target.value; })}>
               {dateProps.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+        {db && (
+          <div className="menu-row" style={{ padding: 0 }}>
+            <span className="muted small">標籤（決定行程顏色，也能在月曆上直接加上）</span>
+            <select className="select-sm" aria-label="標籤欄位" value={src.tagProp === 'none' ? 'none' : sourceTagProp(db, src)?.id || 'none'}
+              onChange={(e) => updateSource(page.id, src.id, (x) => { x.tagProp = e.target.value; })}>
+              {db.properties.filter((p) => p.type === 'select' || p.type === 'multi_select').map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <option value="none">不使用標籤</option>
             </select>
           </div>
         )}
