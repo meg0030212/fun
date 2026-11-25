@@ -238,7 +238,16 @@ export function MonthWidget(p: WidgetProps) {
   };
   const setNote = (key: string, v: string) => set((d) => ({ ...d, days: { ...(d.days || {}), [key]: v } }), 'typing');
   return (
-    <div className={'pl-month' + (ns ? ' slotted' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
+    <div className={'pl-month' + (ns ? ' slotted' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}
+      style={{ gridTemplateRows: `auto repeat(${cells.length / 7}, minmax(${ns ? 26 + ns * 26 : 84}px, 1fr))` }}
+      onMouseDown={(e) => {
+        // clicking anywhere in a day (or slot) puts the caret in its text, after what is written
+        const t = e.target as HTMLElement;
+        if (t.closest('textarea, button, .pl-event')) return;
+        const area = t.closest('.pl-mslot, .pl-month-cell') as HTMLElement | null;
+        const ta = area?.querySelector('textarea');
+        if (ta && !p.readOnly) { e.preventDefault(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      }}>
       {Array.from({ length: 7 }, (_, i) => <div key={i} className="pl-month-dow">{WD[(i + ws) % 7]}</div>)}
       {cells.map((iso, i) => {
         if (!iso) return <div key={'x' + i} className="pl-month-cell empty" />;
@@ -253,7 +262,7 @@ export function MonthWidget(p: WidgetProps) {
               {target && !p.readOnly && <button className="pl-mini-add" title={`新增行程到「${sourceName(target)}」`} onClick={() => addEvent(target, iso)}><Icon.plus size={11} /></button>}
             </div>
             {loose.map((e) => <EventChip key={e.row.id} ev={e} day={iso} />)}
-            {ns ? daySlots.map((s, si) => (
+            {ns ? <div className="pl-mslots">{daySlots.map((s, si) => (
               <div key={s.id} className="pl-mslot" data-gr={week * ns + si} data-gc={col}>
                 <span className="pl-mslot-label">{s.label}</span>
                 <div className="pl-mslot-body">
@@ -262,7 +271,7 @@ export function MonthWidget(p: WidgetProps) {
                     onChange={(v) => setNote(`${iso}|${s.id}`, v)} />
                 </div>
               </div>
-            )) : (
+            ))}</div> : (
               <AutoText value={data.days?.[iso] || ''} readOnly={p.readOnly} className="pl-cell-text" onChange={(v) => setNote(iso, v)} />
             )}
           </div>
