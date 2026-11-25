@@ -1235,3 +1235,41 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .cal-grid.brushing .cal-slot:hover, .cal-grid.brushing:not(.slotted) .cal-day:hover { background: var(--blue-soft); }
 @media (hover: none) { .cal-slot-add, .cal-add { opacity: .6; } }
 @media print { .cal-sources, .calendar .pl-tagbar, .cal-add, .cal-slot-add { display: none !important; } }
+
+/* ---------- batch row selection ---------- */
+.tbl-scroll { margin-left: -52px; padding-left: 52px; }
+.tbl-gutter { left: -50px; width: 48px; gap: 2px; justify-content: flex-end; }
+.row-check { width: 15px; height: 15px; border: 1.5px solid var(--border-strong); border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; background: var(--bg); color: #fff; flex-shrink: 0; }
+.tbl-row:hover .row-check, .row-check.on, .row-check.some, .tbl:has(.row-check.on) .row-check { opacity: 1; }
+.row-check.on, .row-check.some { background: var(--blue); border-color: var(--blue); }
+.row-check-dash { width: 7px; height: 2px; background: #fff; border-radius: 1px; }
+.tbl-row.picked .td { background: var(--blue-soft); }
+.batch-bar { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 2px; padding: 5px 6px 5px 14px; border-radius: 10px; background: var(--bg); box-shadow: var(--shadow); border: 1px solid var(--border); font-size: 13px; max-width: calc(100vw - 32px); flex-wrap: wrap; }
+.batch-count { font-weight: 600; color: var(--blue); margin-right: 8px; white-space: nowrap; }
+.batch-btn { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 5px 9px; border-radius: 6px; cursor: pointer; font: inherit; color: var(--text); white-space: nowrap; }
+.batch-btn:hover { background: var(--bg-hover-strong); }
+.batch-btn.danger { color: var(--red); }
+.batch-confirm { display: inline-flex; align-items: center; gap: 2px; padding-left: 8px; color: var(--text-2); }
+.batch-close { border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 5px; border-radius: 6px; display: inline-flex; margin-left: 4px; }
+.batch-close:hover { background: var(--bg-hover-strong); color: var(--text); }
+@media (max-width: 700px) { .tbl-scroll { margin-left: 0; padding-left: 50px; } .row-check { opacity: 1; } }
+
+/* ---------- quieter visuals ---------- */
+.cell-input.title::placeholder { color: transparent; }
+.cell-input.title:focus::placeholder { color: var(--text-3); }
+.formula-error { color: var(--text-3); font-size: 12px; }
+.formula-error:hover { color: var(--red); }
+.pl-tagbar { gap: 5px; margin-bottom: 6px; min-height: 26px; }
+.pl-tagbar-label { font-size: 12px; color: var(--text-3); font-weight: 500; }
+.pl-tagbar-icon { border: 0; background: transparent; color: var(--text-3); cursor: pointer; padding: 4px; border-radius: 5px; display: inline-flex; }
+.pl-tagbar-icon:hover { background: var(--bg-hover-strong); color: var(--text); }
+.pl-tag-pill { font-size: 12.5px; padding: 1px 8px; line-height: 20px; }
+.pl-tag-edit { opacity: 0; }
+.cal-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: -4px 0 8px; min-height: 28px; }
+.cal-toolbar .pl-tagbar { margin: 0; }
+.cal-toolbar-sep { width: 1px; height: 18px; background: var(--border-strong); }
+.cal-sources { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin: 0; }
+.cal-sources .pl-src-chip { height: 24px; }
+.pl-tag-edit { position: absolute; right: -7px; top: -7px; margin: 0; padding: 1px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: 50%; opacity: 0; pointer-events: none; z-index: 1; }
+.pl-tag-wrap:hover .pl-tag-edit, .pl-tag-edit:focus-visible { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .pl-tag-edit { opacity: 1; pointer-events: auto; } }

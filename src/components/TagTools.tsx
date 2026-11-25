@@ -167,7 +167,7 @@ export function TagBar({ ctx, brush, setBrush }: { ctx: TagCtx; brush: Brush | n
   const deleted = (id: string) => { if (brush?.optId === id) setBrush(null); };
   return (
     <div className="pl-tagbar">
-      <span className="pl-tagbar-label">快速標籤</span>
+      <span className="pl-tagbar-label" title={`快速標籤：選一個標籤，再點${where}上的時段`}>標籤</span>
       {usable.map(({ src, tp }) => (
         <React.Fragment key={src.id}>
           {usable.length > 1 && (tp?.options?.length || 0) > 0 && <span className="pl-src-dot" title={sourceName(src)} style={{ background: `var(--c-${src.color})` }} />}
@@ -197,15 +197,13 @@ export function TagBar({ ctx, brush, setBrush }: { ctx: TagCtx; brush: Brush | n
             if (e.key === 'Escape') { setName(''); setAdding(false); }
           }} />
       ) : (
-        <button className="btn-ghost sm muted" onClick={() => setAdding(true)}><Icon.plus size={12} /> 新增標籤</button>
+        <button className="pl-tagbar-icon" title="新增標籤" aria-label="新增標籤" onClick={() => setAdding(true)}><Icon.plus size={13} /></button>
       ))}
-      {(usable.some((u) => u.tp) || ctx.setTarget) && <button ref={manageBtn} className="btn-ghost sm muted pl-tagbar-manage" onClick={(e) => setManage(e.currentTarget)}><Icon.edit size={12} /> 管理標籤</button>}
+      {(usable.some((u) => u.tp) || ctx.setTarget) && <button ref={manageBtn} className="pl-tagbar-icon pl-tagbar-manage" title="管理標籤（改名、顏色、刪除、存放位置）" aria-label="管理標籤" onClick={(e) => setManage(e.currentTarget)}><Icon.settings size={13} /></button>}
       {editOne && <ManageTags ctx={ctx} anchor={editOne.anchor} only={editOne.tag} onClose={() => setEditOne(null)} onDeleted={deleted}
         onManageAll={() => manageBtn.current && setManage(manageBtn.current)} />}
       {manage && <ManageTags ctx={ctx} anchor={manage} onClose={() => setManage(null)} onDeleted={deleted} />}
-      {current
-        ? <span className="pl-tagbar-hint">點{where}上的時段加上「{current.name}」，再點一次就移除 · 按 Esc 結束</span>
-        : usable.some((u) => u.tp?.options?.length) && <span className="pl-tagbar-hint muted">選一個標籤，再點{where}上的時段</span>}
+      {current && <span className="pl-tagbar-hint">點時段加上「{current.name}」· 再點一次移除 · Esc 結束</span>}
     </div>
   );
 }

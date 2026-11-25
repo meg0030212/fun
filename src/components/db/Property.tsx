@@ -450,7 +450,12 @@ export function PropValue({ db, prop, row, mode, onOpen }: {
       if (!prop.formula?.trim()) {
         return ro ? null : <span className="cell-text placeholder clickable" onClick={open}>設定公式…</span>;
       }
-      if (!r.ok) return <span className="cell-text formula-error" title={r.error} onClick={ro ? undefined : open}>⚠ 錯誤</span>;
+      if (!r.ok) {
+        // a row with nothing filled in yet shows no error, only rows with data do (as a small mark)
+        const blank = !row.title && Object.entries(row.props || {}).every(([, x]) => x == null || x === '' || x === false || (Array.isArray(x) && !x.length));
+        if (blank) return null;
+        return <span className="cell-text formula-error" title={'公式錯誤：' + r.error + '（點一下修改公式）'} onClick={ro ? undefined : open}>⚠</span>;
+      }
       if (typeof r.value === 'boolean') return <span className={'checkbox readonly' + (r.value ? ' on' : '')}>{r.value && <Icon.check size={12} />}</span>;
       const text = displayText(row, prop);
       if (ro && !text) return null;
