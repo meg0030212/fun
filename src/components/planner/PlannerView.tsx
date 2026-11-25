@@ -268,15 +268,21 @@ function WidgetSettings({ page, w, anchor, onClose }: { page: Page; w: PlannerWi
           </>
         )}
 
-        {w.type === 'slots' && (
+        {(w.type === 'slots' || w.type === 'month') && (
           <>
             <div className="muted small">每天怎麼分</div>
             <div className="seg pl-seg">
-              {([['custom', '自訂時段'], ['hourly', '每小時'], ['none', '不分時段']] as const).map(([k, l]) => (
-                <button key={k} className={(o.slotMode || 'custom') === k ? 'on' : ''} onClick={() => patch((x) => { x.opts!.slotMode = k; })}>{l}</button>
+              {(w.type === 'month'
+                ? ([['none', '不分時段'], ['custom', '分時段（上午／下午／晚上…）']] as const)
+                : ([['custom', '自訂時段'], ['hourly', '每小時'], ['none', '不分時段']] as const)
+              ).map(([k, l]) => (
+                <button key={k} className={(o.slotMode || (w.type === 'month' ? 'none' : 'custom')) === k ? 'on' : ''} onClick={() => patch((x) => {
+                  x.opts!.slotMode = k;
+                  if (k === 'custom' && !x.opts!.slots?.length) x.opts!.slots = ['上午', '下午', '晚上'].map((label) => ({ id: uid(), label }));
+                })}>{l}</button>
               ))}
             </div>
-            {(o.slotMode || 'custom') === 'custom' && (
+            {(o.slotMode || (w.type === 'month' ? 'none' : 'custom')) === 'custom' && (
               <div className="pl-edit-list">
                 {(o.slots || []).map((s, i) => (
                   <div key={s.id} className="pl-edit-row">
