@@ -888,6 +888,9 @@ body.grid-selecting, body.grid-selecting * { user-select: none !important; curso
 .editor.cross-select { outline: none; caret-color: transparent; }
 .editor.cross-select .block-handle { opacity: 0 !important; }
 
+.card-inner > .card-props:first-child { margin-top: 0; }
+.card-inner:empty { min-height: 18px; }
+
 /* comments */
 .comments-panel { width: 340px; border-left: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0; }
 .cp-head { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }

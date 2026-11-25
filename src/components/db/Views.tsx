@@ -262,10 +262,11 @@ function CardProps({ db, view, row, exclude }: { db: Database; view: View; row: 
 }
 
 function CardTitle({ row }: { row: Page }) {
+  if (!row.icon && !row.title) return null; // untitled: show only the other fields
   return (
     <div className="card-title">
       {row.icon && <PageIcon icon={row.icon} size={14} />}
-      <span>{row.title || '未命名'}</span>
+      {row.title && <span>{row.title}</span>}
     </div>
   );
 }
@@ -385,7 +386,7 @@ export function ListView({ db, view, rows, newRow }: VP) {
       {rows.map((r) => (
         <div key={r.id} className="list-row" onClick={() => openPeek(r.id)}>
           <PageIcon icon={r.icon} size={16} />
-          <span className="list-title">{r.title || '未命名'}</span>
+          <span className="list-title">{r.title}</span>
           <span className="spacer" />
           <div className="list-props"><CardProps db={db} view={view} row={r} /></div>
           <button className="btn-icon sm list-more" onClick={(e) => { e.stopPropagation(); setRowMenu({ row: r, anchor: e.currentTarget }); }}><Icon.more size={14} /></button>
@@ -595,7 +596,7 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
                     onDragStart={(e) => { setDrag(it.row.id); e.dataTransfer.setData('text/plain', it.row.id); }}
                     onDragEnd={() => { setDrag(null); setOver(null); }}
                     onClick={() => openPeek(it.row.id)}>
-                    <div className="wk-ev-title">{it.row.icon && !/^(https?:|data:)/.test(it.row.icon) ? it.row.icon + ' ' : ''}{it.row.title || '未命名'}</div>
+                    <div className="wk-ev-title">{it.row.icon && !/^(https?:|data:)/.test(it.row.icon) ? it.row.icon + ' ' : ''}{it.row.title}</div>
                     <div className="wk-ev-time">{formatTime(timePart(it.d.start), prop.timeFormat)}{it.d.end ? ` – ${formatTime(timePart(it.d.end), prop.timeFormat)}` : ''}</div>
                   </div>
                 ))}
@@ -641,7 +642,7 @@ export function CalendarView({ db, view, rows, newRow }: VP) {
                     <div className="card-title">
                       {t && <span className="cal-time">{t}</span>}
                       {it.row.icon && <PageIcon icon={it.row.icon} size={12} />}
-                      <span>{it.row.title || '未命名'}</span>
+                      {it.row.title && <span>{it.row.title}</span>}
                     </div>
                     {!multi && <CardProps db={db} view={view} row={it.row} exclude={[prop.id]} />}
                   </div>
