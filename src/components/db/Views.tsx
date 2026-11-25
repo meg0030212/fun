@@ -4,7 +4,7 @@ import type { Database, Page, Property, View } from '../../types';
 import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
 import { openPeek } from '../../ui';
 import { COLORS, htmlToText, monthLabel, uid } from '../../utils';
-import { handleGridKey, useGrid } from '../../gridNav';
+import { clearRange, getRangeRect, handleGridKey, setRange, useGrid } from '../../gridNav';
 import { isRocEra } from '../../utils';
 import { DateVal, datePart, daysCovered, endTime, formatTime, hasTime, moveDate, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Icon } from '../Icons';
@@ -12,7 +12,7 @@ import { MenuItem, Popover, MenuSep } from '../Popover';
 import { PageIcon, coverStyle } from '../EmojiPicker';
 import { AddPropertyMenu, Chip, PropIcon, PropValue, PropertyMenu, StatusChip } from './Property';
 import { CALCS, calculate, displayText, getValue, isEmpty, visibleProps } from './dbutils';
-import { applyFill, canFill, seriesValue, writeCells } from './fill';
+import { applyFillRange, canFill, fillPreviewText, FillRect, writeCells } from './fill';
 
 interface VP {
   db: Database;
@@ -53,19 +53,28 @@ export function TableView({ db, view, rows, newRow }: VP) {
   const [dropRow, setDropRow] = useState<{ id: string; after: boolean } | null>(null);
   const [dragCol, setDragCol] = useState<string | null>(null);
   const [active, setActive] = useState<{ ri: number; ci: number } | null>(null);
-  const [fill, setFill] = useState<{ ri: number; ci: number; to: number } | null>(null);
+  const [fill, setFill] = useState<FillRect | null>(null);
+  const [sel, setSel] = useState<{ r0: number; r1: number; c0: number; c1: number } | null>(null);
   const tblRef = useRef<HTMLDivElement>(null);
+  // follow the grid's block selection so the fill handle sits on its last cell
+  React.useEffect(() => {
+    const el = tblRef.current;
+    if (!el) return;
+    const on = (e: Event) => setSel((e as CustomEvent).detail);
+    el.addEventListener('gridrange', on);
+    return () => el.removeEventListener('gridrange', on);
+  }, []);
 
-  /* Excel-style fill handle: drag the corner of the selected cell up or down */
-  const startFill = (e: React.MouseEvent, ri: number, ci: number) => {
+  /* Excel-style fill handle: drag the corner of the selected cell (or block) up or down */
+  const startFill = (e: React.MouseEvent, r0: number, r1: number, c0: number, c1: number) => {
     e.preventDefault();
     e.stopPropagation();
     const scroller = tblRef.current?.closest('.page-scroller') as HTMLElement | null;
-    let cur = { ri, ci, to: ri };
+    let cur: FillRect = { r0, r1, c0, c1, to: r1 };
     const rowH = 34;
     const targetOf = (y: number) => {
       const els = Array.from(tblRef.current?.querySelectorAll<HTMLElement>('.tbl-row[data-ri]') || []);
-      if (!els.length) return ri;
+      if (!els.length) return r1;
       for (let i = 0; i < els.length; i++) {
         const r = els[i].getBoundingClientRect();
         if (y < r.bottom) return Math.max(0, i);
@@ -74,7 +83,8 @@ export function TableView({ db, view, rows, newRow }: VP) {
       return els.length - 1 + Math.min(200, Math.ceil((y - last.bottom) / rowH));
     };
     const move = (ev: MouseEvent) => {
-      cur = { ri, ci, to: targetOf(ev.clientY) };
+      const t = targetOf(ev.clientY);
+      cur = { r0, r1, c0, c1, to: t >= r0 && t <= r1 ? r1 : t };
       setFill(cur);
       if (scroller) {
         const r = scroller.getBoundingClientRect();
@@ -87,35 +97,26 @@ export function TableView({ db, view, rows, newRow }: VP) {
       document.removeEventListener('mouseup', up);
       document.body.classList.remove('filling');
       setFill(null);
-      // select the source cell (not its text box) so Ctrl+Z undoes the whole fill at once
-      tblRef.current?.querySelector<HTMLElement>(`[data-gr="${ri}"][data-gc="${ci}"]`)?.focus({ preventScroll: true });
-      const prop = props[ci];
-      const src = rows[ri];
-      if (!prop || !src || cur.to === ri) return;
-      const copyOnly = ev.ctrlKey || ev.metaKey || ev.altKey;
-      if (cur.to > ri) {
-        const targets = rows.slice(ri + 1, Math.min(rows.length, cur.to + 1));
-        const extra = Math.max(0, cur.to - (rows.length - 1));
-        applyFill(db, prop, src, targets, 1, extra, copyOnly, view);
-      } else {
-        const targets = rows.slice(cur.to, ri).reverse();
-        applyFill(db, prop, src, targets, -1, 0, copyOnly, view);
-      }
+      const root = tblRef.current;
+      // keep the keyboard on a cell (not its text box) so Ctrl+Z undoes the whole fill at once
+      root?.querySelector<HTMLElement>(`[data-gr="${r0}"][data-gc="${c0}"]`)?.focus({ preventScroll: true });
+      if (cur.to >= r0 && cur.to <= r1) return;
+      applyFillRange(db, props, rows, cur, ev.ctrlKey || ev.metaKey || ev.altKey, view);
+      // select everything the fill covered, like a spreadsheet
+      if (root) requestAnimationFrame(() => setRange(root, { r: Math.min(r0, cur.to), c: c0 }, { r: Math.max(r1, cur.to), c: c1 }));
     };
     document.body.classList.add('filling');
     setFill(cur);
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', up);
   };
-  const inFill = (ri: number, ci: number) => !!fill && fill.ci === ci && fill.to !== fill.ri && (fill.to > fill.ri ? ri > fill.ri && ri <= fill.to : ri < fill.ri && ri >= fill.to);
-  const fillPreview = (k: number) => {
-    if (!fill) return '';
-    const prop = props[fill.ci];
-    const src = rows[fill.ri];
-    const v = seriesValue(prop, prop.type === 'title' ? src.title : src.props?.[prop.id], k, false);
-    const fake = { ...src, title: prop.type === 'title' ? v : src.title, props: { ...(src.props || {}), [prop.id]: v } } as Page;
-    return displayText(fake, prop);
-  };
+  const inFill = (ri: number, ci: number) => !!fill && ci >= fill.c0 && ci <= fill.c1 && canFill(props[ci])
+    && (fill.to > fill.r1 ? ri > fill.r1 && ri <= fill.to : fill.to < fill.r0 && ri >= fill.to && ri < fill.r0);
+  const isFillSource = (ri: number, ci: number) => !!fill && ri >= fill.r0 && ri <= fill.r1 && ci >= fill.c0 && ci <= fill.c1;
+  const preview = (ri: number, ci: number) => (fill ? fillPreviewText(props, rows, fill, ri, ci, displayText) : '');
+  // where the fill handle goes: last cell of the selected block, else the active cell
+  const handleAt = fill ? { ri: fill.r1, ci: fill.c1 } : sel ? { ri: sel.r1, ci: sel.c1 } : active;
+  const handleRect = (ri: number, ci: number) => (sel ? { ...sel } : { r0: ri, r1: ri, c0: ci, c1: ci });
   const extraRows = fill && fill.to > rows.length - 1 ? fill.to - (rows.length - 1) : 0;
   const grid = useGrid({
     get: (r, c) => (rows[r] && props[c] ? displayText(rows[r], props[c]) : ''),
@@ -148,7 +149,13 @@ export function TableView({ db, view, rows, newRow }: VP) {
       <div className="tbl" ref={tblRef} style={{ minWidth: total + 40 }} {...grid}
         onFocusCapture={(e) => {
           const c = (e.target as HTMLElement).closest<HTMLElement>('[data-gc]');
-          if (c) setActive({ ri: Number(c.dataset.gr), ci: Number(c.dataset.gc) });
+          if (c) {
+            const ri = Number(c.dataset.gr), ci = Number(c.dataset.gc);
+            setActive({ ri, ci });
+            // focusing a cell outside the selected block (Tab, click…) ends that selection
+            const r = getRangeRect(e.currentTarget);
+            if (r && (ri < r.r0 || ri > r.r1 || ci < r.c0 || ci > r.c1)) clearRange(e.currentTarget);
+          }
         }}
         onBlurCapture={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setActive(null); }}>
         <div className="tbl-row tbl-head">
@@ -199,11 +206,12 @@ export function TableView({ db, view, rows, newRow }: VP) {
                 onClick={(e) => setRowMenu({ row: r, anchor: e.currentTarget as HTMLElement })}><Icon.drag size={12} /></span>
             </div>
             {props.map((p, ci) => (
-              <div key={p.id} className={'td td-' + p.type + (inFill(ri, ci) ? ' fill-preview' : '') + (fill && fill.ri === ri && fill.ci === ci ? ' fill-source' : '')} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
+              <div key={p.id} className={'td td-' + p.type + (inFill(ri, ci) ? ' fill-preview' : '') + (isFillSource(ri, ci) ? ' fill-source' : '')} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
                 <PropValue db={db} prop={p} row={r} mode="table" onOpen={p.type === 'title' ? () => openPeek(r.id) : undefined} />
-                {inFill(ri, ci) && <span className="fill-ghost-text">{fillPreview(fill!.to > fill!.ri ? ri - fill!.ri : ri - fill!.ri)}</span>}
-                {((active && active.ri === ri && active.ci === ci) || (fill && fill.ri === ri && fill.ci === ci)) && canFill(p) && (
-                  <span className="fill-handle" title="往上或往下拖曳以填入（按住 Ctrl 只複製不遞增）" onMouseDown={(e) => startFill(e, ri, ci)} />
+                {inFill(ri, ci) && <span className="fill-ghost-text">{preview(ri, ci)}</span>}
+                {handleAt && handleAt.ri === ri && handleAt.ci === ci && (canFill(p) || sel) && (
+                  <span className="fill-handle" title="往上或往下拖曳以填入（選取多格時依序延續；按住 Ctrl 只重複不遞增）"
+                    onMouseDown={(e) => { const h = fill || handleRect(ri, ci); startFill(e, h.r0, h.r1, h.c0, h.c1); }} />
                 )}
               </div>
             ))}
@@ -214,9 +222,9 @@ export function TableView({ db, view, rows, newRow }: VP) {
           <div key={'ghost' + i} className="tbl-row ghost">
             <div className="tbl-gutter" />
             {props.map((p, ci) => (
-              <div key={p.id} className={'td' + (ci === fill!.ci ? ' fill-preview' : '')} style={{ width: width(p) }}>
-                {ci === fill!.ci && <span className="fill-ghost-text">{fillPreview(rows.length - fill!.ri + i)}</span>}
-                {i === 0 && ci === (fill!.ci === 0 ? 1 : 0) && <span className="fill-new-label">＋ 放開後新增 {extraRows} 列</span>}
+              <div key={p.id} className={'td' + (ci >= fill!.c0 && ci <= fill!.c1 && canFill(p) ? ' fill-preview' : '')} style={{ width: width(p) }}>
+                {ci >= fill!.c0 && ci <= fill!.c1 && canFill(p) && <span className="fill-ghost-text">{preview(rows.length + i, ci)}</span>}
+                {i === 0 && ci === (fill!.c0 === 0 ? fill!.c1 + 1 : 0) && <span className="fill-new-label">＋ 放開後新增 {extraRows} 列</span>}
               </div>
             ))}
             <div className="td td-fill" />
