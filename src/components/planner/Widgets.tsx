@@ -357,7 +357,11 @@ function createTagDatabase(page: Page): string {
 }
 
 /** rename / recolour / delete tags, and choose where new tags are kept */
-function ManageTags({ page, w, anchor, onClose, onDeleted }: { page: Page; w: PlannerWidget; anchor: HTMLElement; onClose: () => void; onDeleted: (optId: string) => void }) {
+function ManageTags({ page, w, anchor, onClose, onDeleted, only }: {
+  page: Page; w: PlannerWidget; anchor: HTMLElement; onClose: () => void; onDeleted: (optId: string) => void;
+  /** edit just this one tag (from the tag itself) */
+  only?: Brush;
+}) {
   const dbs = useStore((s) => s.dbs);
   const pages = useStore((s) => s.pages);
   const usable = useUsableSources(page, w);
@@ -384,16 +388,17 @@ function ManageTags({ page, w, anchor, onClose, onDeleted }: { page: Page; w: Pl
     });
     onDeleted(optId);
     setConfirm(null);
+    if (only) onClose();
   };
   return (
     <Popover anchor={anchor} onClose={onClose} width={340}>
       <div className="pl-tagmanage">
-        <div className="strong small">管理標籤</div>
-        {usable.map(({ src, tp }) => (
+        <div className="strong small">{only ? '編輯標籤' : '管理標籤'}</div>
+        {usable.filter(({ src }) => !only || src.id === only.srcId).map(({ src, tp }) => (
           <div key={src.id} className="pl-tagmanage-group">
-            {usable.length > 1 && <div className="pl-tagmenu-src"><span className="pl-src-dot" style={{ background: `var(--c-${src.color})` }} /> {sourceName(src)}{tp && <span className="muted">・{tp.name}</span>}</div>}
+            {usable.length > 1 && !only && <div className="pl-tagmenu-src"><span className="pl-src-dot" style={{ background: `var(--c-${src.color})` }} /> {sourceName(src)}{tp && <span className="muted">・{tp.name}</span>}</div>}
             {!(tp?.options || []).length && <div className="muted small">沒有標籤</div>}
-            {tp && (tp.options || []).map((o) => {
+            {tp && (tp.options || []).filter((o) => !only || o.id === only.optId).map((o) => {
               const key = src.id + o.id;
               const isConfirm = confirm?.srcId === src.id && confirm.optId === o.id;
               const n = isConfirm ? rowsWith(src.dbId, tp.id, o.id).length : 0;
@@ -435,6 +440,8 @@ function ManageTags({ page, w, anchor, onClose, onDeleted }: { page: Page; w: Pl
             })}
           </div>
         ))}
+        {only && <button className="btn-ghost sm muted" style={{ alignSelf: 'flex-start' }} onClick={(e) => { e.stopPropagation(); onClose(); setTimeout(() => (document.querySelector('.pl-tagbar-manage') as HTMLElement | null)?.click(), 0); }}>管理全部標籤…</button>}
+        {!only && <>
         <div className="menu-row" style={{ padding: 0, gap: 6 }}>
           <span className="muted small">新標籤存到</span>
           <select className="select-sm" aria-label="新標籤存到" value={tt?.id || ''} onChange={(e) => {
@@ -446,6 +453,7 @@ function ManageTags({ page, w, anchor, onClose, onDeleted }: { page: Page; w: Pl
           </select>
         </div>
         <div className="muted small">標籤會存成資料表裡的一列，可以按上方的資料來源開啟資料庫查看。</div>
+        </>}
       </div>
     </Popover>
   );
@@ -468,6 +476,7 @@ function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; br
   const target = tagTarget(page, w);
   const [adding, setAdding] = useState(false);
   const [manage, setManage] = useState<HTMLElement | null>(null);
+  const [editOne, setEditOne] = useState<{ anchor: HTMLElement; tag: Brush } | null>(null);
   const [name, setName] = useState('');
   if (!usable.length) return null;
   const create = () => {
@@ -487,9 +496,16 @@ function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; br
           {(tp?.options || []).map((o) => {
             const on = brush?.srcId === src.id && brush.optId === o.id;
             return (
-              <button key={o.id} className={`tag tag-${o.color} pl-tag-pill` + (on ? ' on' : '')} aria-pressed={on}
-                title={on ? '再按一次結束' : `選取後，點月曆上的時段就會加上「${o.name}」`}
-                onClick={() => setBrush(on ? null : { srcId: src.id, optId: o.id })}>{o.name}</button>
+              <span key={o.id} className="pl-tag-wrap">
+                <button className={`tag tag-${o.color} pl-tag-pill` + (on ? ' on' : '')} aria-pressed={on}
+                  title={on ? '再按一次結束（按右鍵可編輯或刪除）' : `選取後，點月曆上的時段就會加上「${o.name}」（按右鍵可編輯或刪除）`}
+                  onClick={() => setBrush(on ? null : { srcId: src.id, optId: o.id })}
+                  onContextMenu={(e) => { e.preventDefault(); setEditOne({ anchor: e.currentTarget, tag: { srcId: src.id, optId: o.id } }); }}>{o.name}</button>
+                <button className="pl-tag-edit" title={`編輯或刪除「${o.name}」`} aria-label={`編輯${o.name}`}
+                  onClick={(e) => setEditOne({ anchor: e.currentTarget.previousElementSibling as HTMLElement, tag: { srcId: src.id, optId: o.id } })}>
+                  <Icon.more size={12} />
+                </button>
+              </span>
             );
           })}
         </React.Fragment>
@@ -505,7 +521,8 @@ function TagBar({ page, w, brush, setBrush }: { page: Page; w: PlannerWidget; br
       ) : (
         <button className="btn-ghost sm muted" onClick={() => setAdding(true)}><Icon.plus size={12} /> 新增標籤</button>
       ))}
-      {usable.some((u) => u.tp) && <button className="btn-ghost sm muted" onClick={(e) => setManage(e.currentTarget)}><Icon.edit size={12} /> 管理標籤</button>}
+      {usable.some((u) => u.tp) && <button className="btn-ghost sm muted pl-tagbar-manage" onClick={(e) => setManage(e.currentTarget)}><Icon.edit size={12} /> 管理標籤</button>}
+      {editOne && <ManageTags page={page} w={w} anchor={editOne.anchor} only={editOne.tag} onClose={() => setEditOne(null)} onDeleted={(id) => { if (brush?.optId === id) setBrush(null); }} />}
       {manage && <ManageTags page={page} w={w} anchor={manage} onClose={() => setManage(null)} onDeleted={(id) => { if (brush?.optId === id) setBrush(null); }} />}
       {current
         ? <span className="pl-tagbar-hint">點月曆上的時段加上「{current.name}」，再點一次就移除 · 按 Esc 結束</span>
