@@ -8,6 +8,7 @@ import { PageIcon } from './EmojiPicker';
 import { Icon } from './Icons';
 import { DatabaseView } from './db/DatabaseView';
 import { Editable } from './Editable';
+import { handleGridKey } from '../gridNav';
 
 interface Props {
   block: Block;
@@ -214,12 +215,12 @@ function SimpleTable({ block, update, readOnly }: Props) {
   return (
     <div className="blk-table-wrap">
       <div className="blk-table-scroll">
-        <table className="blk-table">
+        <table className="blk-table" onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
           <tbody>
             {rows.map((row, r) => (
               <tr key={r} className={r === 0 && block.headerRow ? 'head' : ''}>
                 {row.map((cell, c) => (
-                  <td key={c}>
+                  <td key={c} data-gr={r} data-gc={c}>
                     <Editable html={cell} readOnly={readOnly} onChange={(h) => setCell(r, c, h)}
                       onKeyDown={(e, el) => {
                         if (e.key === 'Tab') {

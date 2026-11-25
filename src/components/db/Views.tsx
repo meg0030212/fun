@@ -3,6 +3,7 @@ import type { Database, Page, Property, View } from '../../types';
 import { duplicatePage, makeProp, setRowProp, trashPage, update, updateDb, updateView } from '../../store';
 import { openPeek } from '../../ui';
 import { COLORS, htmlToText, monthLabel, uid } from '../../utils';
+import { handleGridKey } from '../../gridNav';
 import { DateVal, datePart, daysCovered, endTime, formatTime, hasTime, moveDate, parseDateValue, serializeDate, timePart, toDate, toLocalIso } from '../../dates';
 import { Icon } from '../Icons';
 import { MenuItem, Popover, MenuSep } from '../Popover';
@@ -71,7 +72,7 @@ export function TableView({ db, view, rows, newRow }: VP) {
 
   return (
     <div className="tbl-scroll">
-      <div className="tbl" style={{ minWidth: total + 40 }}>
+      <div className="tbl" style={{ minWidth: total + 40 }} onKeyDown={(e) => handleGridKey(e, e.currentTarget)}>
         <div className="tbl-row tbl-head">
           <div className="tbl-gutter" />
           {props.map((p) => (
@@ -97,7 +98,7 @@ export function TableView({ db, view, rows, newRow }: VP) {
           ))}
           <div className="th th-add" onClick={(e) => setAddProp(e.currentTarget as HTMLElement)}><Icon.plus size={14} /></div>
         </div>
-        {rows.map((r) => (
+        {rows.map((r, ri) => (
           <div key={r.id} className={'tbl-row' + (dragRow === r.id ? ' dragging' : '') + (dropRow?.id === r.id ? (dropRow.after ? ' drop-after' : ' drop-before') : '')}
             onDragOver={(e) => {
               if (!dragRow) return;
@@ -119,8 +120,8 @@ export function TableView({ db, view, rows, newRow }: VP) {
                 onDragEnd={() => { setDragRow(null); setDropRow(null); }}
                 onClick={(e) => setRowMenu({ row: r, anchor: e.currentTarget as HTMLElement })}><Icon.drag size={12} /></span>
             </div>
-            {props.map((p) => (
-              <div key={p.id} className={'td td-' + p.type} style={{ width: width(p) }}>
+            {props.map((p, ci) => (
+              <div key={p.id} className={'td td-' + p.type} style={{ width: width(p) }} data-gr={ri} data-gc={ci} tabIndex={-1}>
                 <PropValue db={db} prop={p} row={r} mode="table" onOpen={p.type === 'title' ? () => openPeek(r.id) : undefined} />
               </div>
             ))}
