@@ -305,7 +305,7 @@ export function MonthWidget(p: WidgetProps) {
     <>
       {!p.readOnly && !p.w.opts?.hideTagBar && <TagBar ctx={ctx} brush={brush} setBrush={setBrush} />}
       <div className={'pl-month' + (ns ? ' slotted' : '') + (brush ? ' brushing' : '')} data-gwrap={ns ? undefined : '1'} onKeyDown={grid.onKeyDown} onCopy={grid.onCopy} onCut={grid.onCut} onPaste={grid.onPaste}
-        style={{ gridTemplateRows: `auto repeat(${cells.length / 7}, minmax(${ns ? 26 + ns * 26 : 84}px, 1fr))` }}
+        style={{ gridTemplateRows: `min-content repeat(${cells.length / 7}, auto)`, ['--cell-min' as any]: `${ns ? 26 + ns * 26 : 84}px` }}
         onMouseDown={(e) => {
           const t = e.target as HTMLElement;
           if (brush && e.button === 0) {
