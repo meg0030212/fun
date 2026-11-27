@@ -6,6 +6,7 @@ import { setBlocks, getState } from '../store';
 import { COLORS, COLOR_NAMES, escapeHtml, htmlToText, safeUrl } from '../utils';
 import { TURN_INTO, TEXT_TYPES } from '../blockTypes';
 import { Icon } from './Icons';
+import { calloutDefaults, inlineClass, recentColors, rememberColor } from '../lastStyle';
 
 interface TB { rect: DOMRect; ed: HTMLElement }
 
@@ -35,6 +36,8 @@ function unwrapColors(root: ParentNode) {
   });
 }
 
+const colorLabel = (c: string) => (c.endsWith('_bg') ? COLOR_NAMES[c.slice(0, -3)] + '背景' : COLOR_NAMES[c]);
+
 export function FormatToolbar() {
   const [tb, setTb] = useState<TB | null>(null);
   const [mode, setMode] = useState<'main' | 'link' | 'color' | 'turn'>('main');
@@ -44,8 +47,23 @@ export function FormatToolbar() {
   const mouseDown = useRef(false);
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const pickRef = useRef<((c: string) => void) | null>(null);
   const modeRef = useRef(mode);
   modeRef.current = mode;
+
+  // Ctrl/Cmd+Shift+H: colour the selection with the last used colour
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== 'h') return;
+      const last = recentColors()[0];
+      const sel = window.getSelection();
+      if (!last || !sel || sel.isCollapsed || !editableOfSelection()) return;
+      e.preventDefault();
+      pickRef.current?.(last);
+    };
+    document.addEventListener('keydown', k, true);
+    return () => document.removeEventListener('keydown', k, true);
+  }, []);
 
   useEffect(() => {
     const recompute = () => {
@@ -131,6 +149,12 @@ export function FormatToolbar() {
     fire(tb.ed);
   };
 
+  const recent = recentColors();
+  const last = recent[0];
+  /** apply a colour in block form ('red' / 'red_bg' / 'default') and remember it for next time */
+  const pickColor = (c: string) => { rememberColor(c); applyColor(c === 'default' ? null : inlineClass(c)); };
+  pickRef.current = pickColor;
+
   const applyColor = (cls: string | null) => {
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount) return;
@@ -184,7 +208,7 @@ export function FormatToolbar() {
       if (b.type === 'code' && t !== 'code') b.html = escapeHtml(b.html);
       b.type = t;
       if (t === 'todo' && b.checked === undefined) b.checked = false;
-      if (t === 'callout') { b.icon = b.icon || '💡'; b.color = b.color || 'gray_bg'; }
+      if (t === 'callout') { const d = calloutDefaults(); b.icon = b.icon || d.icon; b.color = b.color || (d.color === 'default' ? undefined : d.color); }
     });
     setTb(null);
     setMode('main');
@@ -225,21 +249,36 @@ export function FormatToolbar() {
           <button className={'ft-btn' + (state('strikeThrough') ? ' on' : '')} title="刪除線 Ctrl+Shift+S" onClick={() => exec('strikeThrough')}><s>S</s></button>
           <button className={'ft-btn' + (inCode() ? ' on' : '')} title="行內程式碼 Ctrl+E" onClick={toggleCode}><span className="mono" style={{ fontSize: 12 }}>&lt;/&gt;</span></button>
           <span className="ft-sep" />
-          <button className="ft-btn text" title="文字顏色" onClick={() => setMode(mode === 'color' ? 'main' : 'color')}><span className="color-a">A</span><Icon.chevronDown size={10} /></button>
+          {last ? (
+            <span className="ft-split">
+              <button className="ft-btn" title={`套用上次的顏色：${colorLabel(last)}（Ctrl+Shift+H）`} onClick={() => pickColor(last)}><span className={'color-a ' + (last.endsWith('_bg') ? 'bgbox ' : '') + inlineClass(last)}>A</span></button>
+              <button className="ft-btn caret" title="文字顏色" onClick={() => setMode(mode === 'color' ? 'main' : 'color')}><Icon.chevronDown size={10} /></button>
+            </span>
+          ) : (
+            <button className="ft-btn text" title="文字顏色" onClick={() => setMode(mode === 'color' ? 'main' : 'color')}><span className="color-a">A</span><Icon.chevronDown size={10} /></button>
+          )}
           <button className="ft-btn" title="清除格式" onClick={() => { exec('removeFormat'); exec('unlink'); applyColor(null); }}><Icon.x size={13} /></button>
         </div>
       )}
       {mode === 'color' && (
         <div className="ft-drop">
+          {recent.length > 0 && <>
+            <div className="menu-header">最近使用</div>
+            {recent.map((c) => (
+              <div key={'r' + c} className="menu-item" onClick={() => pickColor(c)}>
+                <span className={'color-a ' + (c.endsWith('_bg') ? 'bgbox ' : '') + inlineClass(c)}>A</span><span className="menu-label">{colorLabel(c)}</span>
+              </div>
+            ))}
+          </>}
           <div className="menu-header">文字顏色</div>
           {COLORS.map((c) => (
-            <div key={c} className="menu-item" onClick={() => applyColor(c === 'default' ? null : 'c-' + c)}>
+            <div key={c} className="menu-item" onClick={() => pickColor(c)}>
               <span className={'color-a c-' + c}>A</span><span className="menu-label">{COLOR_NAMES[c]}</span>
             </div>
           ))}
           <div className="menu-header">背景顏色</div>
           {COLORS.slice(1).map((c) => (
-            <div key={c + 'bg'} className="menu-item" onClick={() => applyColor('bg-' + c)}>
+            <div key={c + 'bg'} className="menu-item" onClick={() => pickColor(c + '_bg')}>
               <span className={'color-a bgbox bg-' + c}>A</span><span className="menu-label">{COLOR_NAMES[c]}背景</span>
             </div>
           ))}

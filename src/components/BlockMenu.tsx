@@ -6,6 +6,7 @@ import { TURN_INTO, TEXT_TYPES } from '../blockTypes';
 import { COLORS, COLOR_NAMES, timeAgo } from '../utils';
 import { getState } from '../store';
 import { pageLink, toast } from '../ui';
+import { recentColors } from '../lastStyle';
 
 export function BlockMenu({ block, pageId, anchor, onClose, onDelete, onDuplicate, onTurnInto, onColor }: {
   block: Block; pageId: string; anchor: HTMLElement; onClose: () => void; onDelete: () => void; onDuplicate: () => void;
@@ -51,6 +52,13 @@ export function BlockMenu({ block, pageId, anchor, onClose, onDelete, onDuplicat
       )}
       {sub?.kind === 'color' && (
         <Popover anchor={sub.anchor} placement="right" onClose={() => setSub(null)} width={220}>
+          {recentColors().length > 0 && <>
+            <MenuHeader>最近使用</MenuHeader>
+            {recentColors().map((c) => (
+              <MenuItem key={'r' + c} icon={<span className={'color-a ' + (c.endsWith('_bg') ? 'bgbox bg-' + c.slice(0, -3) : 'c-' + c)}>A</span>}
+                label={c.endsWith('_bg') ? COLOR_NAMES[c.slice(0, -3)] + '背景' : COLOR_NAMES[c]} onClick={() => onColor(c)} />
+            ))}
+          </>}
           <MenuHeader>文字顏色</MenuHeader>
           {COLORS.map((c) => (
             <MenuItem key={c} icon={<span className={'color-a c-' + c}>A</span>} label={COLOR_NAMES[c]}

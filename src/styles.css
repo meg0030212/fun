@@ -1375,3 +1375,8 @@ body.pl-resizing-xy, body.pl-resizing-xy * { cursor: nwse-resize !important; use
 .cover.repositioning { cursor: move; touch-action: none; user-select: none; }
 .cover.repositioning .cover-actions { opacity: 1; }
 .cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 6px 12px; border-radius: 6px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 13px; pointer-events: none; }
+
+/* last-used colour split button in the format toolbar */
+.ft-split { display: inline-flex; align-items: center; }
+.ft-split .ft-btn:first-child { padding-right: 2px; border-radius: 4px 0 0 4px; }
+.ft-split .ft-btn.caret { padding: 0 3px; min-width: 0; border-radius: 0 4px 4px 0; color: var(--text-2); }
