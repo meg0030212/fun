@@ -369,7 +369,7 @@ export function Home() {
         <div className="home-cards">
           {recentPages.map((p) => (
             <div key={p.id} className="home-card" onClick={() => navigate(p.id)}>
-              <div className="home-card-cover" style={p.cover ? coverStyle(p.cover) : undefined} />
+              <div className="home-card-cover" style={p.cover ? coverStyle(p.cover, p.coverPos) : undefined} />
               <div className="home-card-icon"><PageIcon icon={p.icon} size={26} /></div>
               <div className="home-card-title">{p.title || '未命名'}</div>
               <div className="home-card-time muted small">{timeAgo(p.updatedAt)}</div>

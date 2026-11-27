@@ -481,7 +481,7 @@ export function BoardView({ db, view, rows, newRow }: VP) {
                   onDragOver={(e) => { if (drag) e.preventDefault(); }}
                   onDrop={(e) => { e.preventDefault(); e.stopPropagation(); dropTo(g.id, r); }}
                   onClick={() => openPeek(r.id)}>
-                  {r.cover && <div className="card-cover" style={coverStyle(r.cover)} />}
+                  {r.cover && <div className="card-cover" style={coverStyle(r.cover, r.coverPos)} />}
                   <div className="card-inner">
                     <CardTitle row={r} />
                     <CardProps db={db} view={view} row={r} exclude={[prop.id]} />
@@ -539,8 +539,8 @@ export function ListView({ db, view, rows, newRow }: VP) {
 /* ============================== GALLERY ============================== */
 function CardPreview({ row, mode }: { row: Page; mode: View['cardPreview'] }) {
   if (mode === 'none') return null;
-  if (mode === 'cover') return <div className="gal-preview" style={coverStyle(row.cover)} />;
-  if (row.cover) return <div className="gal-preview" style={coverStyle(row.cover)} />;
+  if (mode === 'cover') return <div className="gal-preview" style={coverStyle(row.cover, row.coverPos)} />;
+  if (row.cover) return <div className="gal-preview" style={coverStyle(row.cover, row.coverPos)} />;
   const img = row.blocks.find((b) => b.type === 'image' && b.url);
   if (img) return <div className="gal-preview" style={coverStyle(img.url)} />;
   const lines = row.blocks.filter((b) => b.html && b.type !== 'code').slice(0, 6);
