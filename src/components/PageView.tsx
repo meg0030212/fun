@@ -16,7 +16,7 @@ function focusEditable(pageId: string, blockId: string, pos: 'start' | 'end') {
 }
 import { Editor } from './Editor';
 import { Editable } from './Editable';
-import { EmojiPicker, CoverPicker, coverStyle, PageIcon, randomEmoji } from './EmojiPicker';
+import { EmojiPicker, CoverPicker, coverStyle, isImageCover, PageIcon, randomEmoji } from './EmojiPicker';
 import { Icon } from './Icons';
 import { DatabaseView } from './db/DatabaseView';
 import { AddPropertyMenu, PropIcon, PropValue, PropertyMenu } from './db/Property';
@@ -88,7 +88,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
 
   const uploadCover = async () => {
     const f = await pickFile('image/*');
-    if (f) patchPage(page.id, { cover: await readFileAsDataURL(f) });
+    if (f) patchPage(page.id, { cover: await readFileAsDataURL(f), coverPos: undefined });
   };
 
   const cls = ['page', 'font-' + (page.font || 'default')];
@@ -109,16 +109,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
           {page.trashed && <button className="btn-outline-light" onClick={async () => { if (await askConfirm('確定要永久刪除此頁面嗎？此操作無法復原。', '永久刪除')) { deletePageForever(page.id); navigate('home'); } }}>永久刪除</button>}
         </div>
       )}
-      {page.cover && (
-        <div className="cover" style={coverStyle(page.cover)}>
-          {!readOnly && (
-            <div className="cover-actions">
-              <button className="btn-chip" onClick={(e) => setCoverPick(e.currentTarget)}>更換封面</button>
-              <button className="btn-chip" onClick={() => patchPage(page.id, { cover: undefined })}>移除</button>
-            </div>
-          )}
-        </div>
-      )}
+      {page.cover && <Cover page={page} readOnly={!!readOnly} onChange={(e) => setCoverPick(e)} />}
       <div className="page-content">
         <div className={'page-header' + (page.cover ? ' has-cover' : '') + (page.icon ? ' has-icon' : '')}>
           {page.icon && (
@@ -179,7 +170,7 @@ export function PageView({ pageId, peek }: { pageId: string; peek?: boolean }) {
         <EmojiPicker anchor={iconPick} onClose={() => setIconPick(null)} onSelect={(e) => patchPage(page.id, { icon: e })} onRemove={() => patchPage(page.id, { icon: undefined })} />
       )}
       {coverPick && (
-        <CoverPicker anchor={coverPick} onClose={() => setCoverPick(null)} onSelect={(c) => patchPage(page.id, { cover: c })} onRemove={() => patchPage(page.id, { cover: undefined })} onUpload={uploadCover} />
+        <CoverPicker anchor={coverPick} onClose={() => setCoverPick(null)} onSelect={(c) => patchPage(page.id, { cover: c, coverPos: undefined })} onRemove={() => patchPage(page.id, { cover: undefined, coverPos: undefined })} onUpload={uploadCover} />
       )}
     </div>
   );
@@ -207,6 +198,80 @@ function RowProperties({ page, readOnly }: { page: Page; readOnly: boolean }) {
         <PropertyMenu db={db} prop={db.properties.find((p) => p.id === propMenu.id)!} anchor={propMenu.anchor} onClose={() => setPropMenu(null)} />
       )}
       {add && <AddPropertyMenu db={db} anchor={add} onClose={() => setAdd(null)} />}
+    </div>
+  );
+}
+
+/** page cover; an image cover can be dragged into place (調整位置 → drag → 儲存位置) */
+function Cover({ page, readOnly, onChange }: { page: Page; readOnly: boolean; onChange: (anchor: HTMLElement) => void }) {
+  const [draft, setDraft] = useState<[number, number] | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const natural = useRef<{ url: string; w: number; h: number } | null>(null);
+  const img = isImageCover(page.cover);
+  const pos = draft || page.coverPos || [50, 50];
+
+  // the image's own size tells how far it can move: background-size: cover leaves spare pixels on one axis
+  useEffect(() => {
+    if (!img || !page.cover) return;
+    const url = page.cover;
+    const im = new Image();
+    im.onload = () => { natural.current = { url, w: im.naturalWidth, h: im.naturalHeight }; };
+    im.src = url;
+  }, [img, page.cover]);
+  useEffect(() => { setDraft(null); }, [page.cover]);
+  useEffect(() => {
+    if (!draft) return;
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDraft(null);
+      if (e.key === 'Enter') { patchPage(page.id, { coverPos: draft }); setDraft(null); }
+    };
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  }, [draft, page.id]);
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (!draft || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    const box = ref.current!.getBoundingClientRect();
+    const n = natural.current;
+    // spare pixels the image has beyond the box on each axis
+    let spareX = 0, spareY = 0;
+    if (n && n.w && n.h) {
+      const scale = Math.max(box.width / n.w, box.height / n.h);
+      spareX = n.w * scale - box.width; spareY = n.h * scale - box.height;
+    }
+    const sx = e.clientX, sy = e.clientY, [px, py] = draft;
+    const clamp = (v: number) => Math.round(Math.max(0, Math.min(100, v)) * 10) / 10;
+    const move = (ev: PointerEvent) => {
+      // dragging the picture down shows more of its top, i.e. a smaller percentage
+      const nx = spareX > 1 ? clamp(px - ((ev.clientX - sx) / spareX) * 100) : px;
+      const ny = spareY > 1 ? clamp(py - ((ev.clientY - sy) / spareY) * 100) : py;
+      setDraft([nx, ny]);
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <div ref={ref} className={'cover' + (draft ? ' repositioning' : '')} style={coverStyle(page.cover, pos)} onPointerDown={startDrag}>
+      {draft && <div className="cover-hint">拖曳圖片調整位置</div>}
+      {!readOnly && (
+        <div className="cover-actions">
+          {draft ? (
+            <>
+              <button className="btn-chip" onClick={() => { patchPage(page.id, { coverPos: draft }); setDraft(null); }}>儲存位置</button>
+              <button className="btn-chip" onClick={() => setDraft(null)}>取消</button>
+            </>
+          ) : (
+            <>
+              <button className="btn-chip" onClick={(e) => onChange(e.currentTarget)}>更換封面</button>
+              {img && <button className="btn-chip" onClick={() => setDraft(page.coverPos || [50, 50])}>調整位置</button>}
+              <button className="btn-chip" onClick={() => patchPage(page.id, { cover: undefined, coverPos: undefined })}>移除</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

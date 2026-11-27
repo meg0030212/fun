@@ -1370,3 +1370,8 @@ body.pl-resizing-xy, body.pl-resizing-xy * { cursor: nwse-resize !important; use
   .pl-month .pl-event { padding: 1px 4px; }
 }
 @container (max-width: 96px) { .pl-month .pl-event-title { -webkit-line-clamp: 3; } }
+
+/* cover repositioning */
+.cover.repositioning { cursor: move; touch-action: none; user-select: none; }
+.cover.repositioning .cover-actions { opacity: 1; }
+.cover-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 6px 12px; border-radius: 6px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 13px; pointer-events: none; }

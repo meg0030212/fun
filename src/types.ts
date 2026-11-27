@@ -38,6 +38,8 @@ export interface Page {
   title: string;
   icon?: string;
   cover?: string;
+  /** background-position of an image cover, in % [x, y] (default centred) */
+  coverPos?: [number, number];
   parentId: string | null;
   blocks: Block[];
   createdAt: number;

@@ -84,9 +84,11 @@ export const COVERS = [
   '#e03e3e', '#ffa344', '#ffdc49', '#4dab9a', '#529cca', '#9a6dd7', '#e255a1', '#37352f',
 ];
 
-export function coverStyle(cover?: string): React.CSSProperties {
+export const isImageCover = (cover?: string) => !!cover && /^(https?:|data:)/.test(cover);
+
+export function coverStyle(cover?: string, pos?: [number, number]): React.CSSProperties {
   if (!cover) return {};
-  if (/^(https?:|data:)/.test(cover)) return { backgroundImage: `url("${cover.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  if (isImageCover(cover)) return { backgroundImage: `url("${cover.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: pos ? `${pos[0]}% ${pos[1]}%` : 'center' };
   return { background: cover };
 }
 
