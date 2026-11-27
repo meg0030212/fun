@@ -26,14 +26,85 @@ function fire(ed: HTMLElement) {
   ed.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function unwrapColors(root: ParentNode) {
-  root.querySelectorAll('span').forEach((s) => {
-    if (Array.from(s.classList).some((c) => /^(c|bg)-/.test(c))) {
-      const p = s.parentNode!;
-      while (s.firstChild) p.insertBefore(s.firstChild, s);
-      p.removeChild(s);
-    }
+const COLOR_RE = { c: /^c-/, bg: /^bg-/, all: /^(c|bg)-/ } as const;
+type ColorKind = keyof typeof COLOR_RE;
+
+/** drop the colour classes of `kind` from a span; a span left without classes is unwrapped */
+function stripSpan(s: HTMLElement, kind: ColorKind) {
+  Array.from(s.classList).filter((c) => COLOR_RE[kind].test(c)).forEach((c) => s.classList.remove(c));
+  if (!s.classList.length) s.removeAttribute('class');
+  if (!s.attributes.length) {
+    const p = s.parentNode!;
+    while (s.firstChild) p.insertBefore(s.firstChild, s);
+    p.removeChild(s);
+  }
+}
+const hasColor = (el: Element, kind: ColorKind) => el.tagName === 'SPAN' && Array.from(el.classList).some((c) => COLOR_RE[kind].test(c));
+
+function unwrapColors(root: ParentNode, kind: ColorKind = 'all') {
+  root.querySelectorAll('span').forEach((s) => { if (hasColor(s, kind)) stripSpan(s, kind); });
+}
+
+/**
+ * colour (or un-colour) the selection inside `ed`. kind 'c' = text colour, 'bg' = background, 'all' = both.
+ * Coloured spans around the selection are split so only the selected part changes.
+ */
+export function colorSelection(ed: HTMLElement, kind: ColorKind, cls: string | null) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const r = sel.getRangeAt(0);
+  const mark = document.createElement('span');
+  mark.appendChild(r.extractContents());
+  r.insertNode(mark);
+  // split every coloured ancestor of the selection
+  for (;;) {
+    let a = mark.parentElement;
+    while (a && a !== ed && !hasColor(a, kind)) a = a.parentElement;
+    if (!a || a === ed || !ed.contains(a)) break;
+    const piece = (from: boolean) => {
+      const pr = document.createRange();
+      if (from) { pr.setStart(a!, 0); pr.setEndBefore(mark); } else { pr.setStartAfter(mark); pr.setEnd(a!, a!.childNodes.length); }
+      const f = pr.extractContents();
+      if (!f.textContent) return null;
+      const c = a!.cloneNode(false) as HTMLElement;
+      c.appendChild(f);
+      return c;
+    };
+    // extractContents clones partly covered wrappers (bold, links…), so nesting inside `a` is kept
+    const before = piece(true), after = piece(false);
+    if (before) a.parentNode!.insertBefore(before, a);
+    if (after) a.parentNode!.insertBefore(after, a.nextSibling);
+    stripSpan(a, kind);
+  }
+  unwrapColors(mark, kind);
+  // extractContents leaves emptied coloured spans / formatting at the edges
+  ed.querySelectorAll('span, b, i, u, s, strike, em, strong').forEach((x) => {
+    if (x !== mark && !x.textContent && !x.contains(mark) && !x.querySelector('img, br, [contenteditable="false"]') && (x.tagName !== 'SPAN' || hasColor(x, 'all'))) x.remove();
   });
+  // the whole block may be coloured (block menu → 顏色): 預設 then needs an explicit default colour
+  if (!cls && kind === 'c') {
+    let blockColored = false;
+    for (let el: HTMLElement | null = ed; el && !blockColored; el = el.matches('[data-block-id]') ? null : el.parentElement)
+      blockColored = Array.from(el.classList).some((c) => /^c-/.test(c) && c !== 'c-default');
+    if (blockColored) cls = 'c-default';
+  }
+  if (cls) mark.className = cls;
+  else {
+    const first = mark.firstChild, lastN = mark.lastChild;
+    const p = mark.parentNode!;
+    while (mark.firstChild) p.insertBefore(mark.firstChild, mark);
+    p.removeChild(mark);
+    if (first && lastN) {
+      const r2 = document.createRange();
+      r2.setStartBefore(first); r2.setEndAfter(lastN);
+      sel.removeAllRanges(); sel.addRange(r2);
+    }
+    ed.normalize();
+    return;
+  }
+  const r2 = document.createRange();
+  r2.selectNodeContents(mark);
+  sel.removeAllRanges(); sel.addRange(r2);
 }
 
 const colorLabel = (c: string) => (c.endsWith('_bg') ? COLOR_NAMES[c.slice(0, -3)] + '背景' : COLOR_NAMES[c]);
@@ -152,32 +223,16 @@ export function FormatToolbar() {
   const recent = recentColors();
   const last = recent[0];
   /** apply a colour in block form ('red' / 'red_bg' / 'default') and remember it for next time */
-  const pickColor = (c: string) => { rememberColor(c); applyColor(c === 'default' ? null : inlineClass(c)); };
+  const pickColor = (c: string) => {
+    rememberColor(c);
+    if (c === 'default') applyColor('c', null);
+    else if (c === 'nobg') applyColor('bg', null);
+    else applyColor(c.endsWith('_bg') ? 'bg' : 'c', inlineClass(c));
+  };
   pickRef.current = pickColor;
 
-  const applyColor = (cls: string | null) => {
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const r = sel.getRangeAt(0);
-    const frag = r.extractContents();
-    const wrap = document.createElement('div');
-    wrap.appendChild(frag);
-    unwrapColors(wrap);
-    const nodes = Array.from(wrap.childNodes);
-    if (cls) {
-      const span = document.createElement('span');
-      span.className = cls;
-      nodes.forEach((n) => span.appendChild(n));
-      r.insertNode(span);
-      const r2 = document.createRange();
-      r2.selectNodeContents(span);
-      sel.removeAllRanges();
-      sel.addRange(r2);
-    } else {
-      const f2 = document.createDocumentFragment();
-      nodes.forEach((n) => f2.appendChild(n));
-      r.insertNode(f2);
-    }
+  const applyColor = (kind: ColorKind, cls: string | null) => {
+    colorSelection(tb.ed, kind, cls);
     fire(tb.ed);
     setMode('main');
   };
@@ -257,7 +312,7 @@ export function FormatToolbar() {
           ) : (
             <button className="ft-btn text" title="文字顏色" onClick={() => setMode(mode === 'color' ? 'main' : 'color')}><span className="color-a">A</span><Icon.chevronDown size={10} /></button>
           )}
-          <button className="ft-btn" title="清除格式" onClick={() => { exec('removeFormat'); exec('unlink'); applyColor(null); }}><Icon.x size={13} /></button>
+          <button className="ft-btn" title="清除格式" onClick={() => { exec('removeFormat'); exec('unlink'); applyColor('all', null); }}><Icon.x size={13} /></button>
         </div>
       )}
       {mode === 'color' && (
@@ -277,6 +332,9 @@ export function FormatToolbar() {
             </div>
           ))}
           <div className="menu-header">背景顏色</div>
+          <div className="menu-item" onClick={() => pickColor('nobg')}>
+            <span className="color-a bgbox">A</span><span className="menu-label">無背景</span>
+          </div>
           {COLORS.slice(1).map((c) => (
             <div key={c + 'bg'} className="menu-item" onClick={() => pickColor(c + '_bg')}>
               <span className={'color-a bgbox bg-' + c}>A</span><span className="menu-label">{COLOR_NAMES[c]}背景</span>
