@@ -312,7 +312,7 @@ export function CommentsPanel({ pageId }: { pageId: string }) {
       </div>
       <div className="cp-input">
         <span className="ws-avatar sm">{(user || '我').slice(0, 1)}</span>
-        <textarea className="input" rows={2} placeholder="新增留言…" value={text} onChange={(e) => setText(e.target.value)}
+        <textarea className="input" rows={2} placeholder="新增留言…" autoFocus value={text} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isImeKey(e)) { e.preventDefault(); add(); } }} />
         <button className="btn-primary sm" disabled={!text.trim()} onClick={add}>送出</button>
       </div>

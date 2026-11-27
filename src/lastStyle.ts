@@ -25,7 +25,7 @@ export function recentColors(): string[] {
   try { const v = JSON.parse(localStorage.getItem(COLORS_KEY) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
 }
 export function rememberColor(c: string) {
-  if (!c || c === 'default') return;
+  if (!c || c === 'default' || c === 'nobg' || c === 'default_bg') return;
   write(COLORS_KEY, [c, ...recentColors().filter((x) => x !== c)].slice(0, 5));
 }
 /** 'red' → 'c-red', 'red_bg' → 'bg-red' (inline span classes) */
