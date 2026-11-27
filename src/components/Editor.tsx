@@ -17,6 +17,7 @@ import { navigate, setUI, toast } from '../ui';
 import { attachCrossSelect } from '../crossSelect';
 import { blocksToMarkdown, markdownToBlocks } from '../markdown';
 import { EmojiPicker } from './EmojiPicker';
+import { calloutDefaults, rememberCallout, rememberColor } from '../lastStyle';
 
 interface MenuState {
   kind: 'slash' | 'mention';
@@ -146,7 +147,7 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
       if (!TEXT_TYPES.includes(b.type)) b.html = '';
       b.type = type;
       if (type === 'todo' && b.checked === undefined) b.checked = false;
-      if (type === 'callout') { b.icon = b.icon || '💡'; b.color = b.color || 'gray_bg'; }
+      if (type === 'callout') { const d = calloutDefaults(); b.icon = b.icon || d.icon; b.color = b.color || (d.color === 'default' ? undefined : d.color); }
       if (type === 'code') b.lang = b.lang || 'plain';
     });
     focusBlock(id, 'end');
@@ -223,7 +224,7 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
     const fresh = newBlock(type);
     const patch: Partial<Block> = { type, ...item.extra };
     if (type === 'todo') patch.checked = false;
-    if (type === 'callout') patch.icon = patch.icon || '💡';
+    if (type === 'callout') { const d = calloutDefaults(); patch.icon = d.icon; patch.color = d.color === 'default' ? undefined : d.color; }
     if (type === 'table') { patch.rows = fresh.rows; patch.headerRow = true; }
     if (type === 'code') patch.lang = 'plain';
     if (!TEXT_TYPES.includes(type)) patch.html = '';
@@ -1085,12 +1086,12 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
             onDelete={() => { removeBlocks(selected.length > 1 ? selected : [b.id]); setSelected([]); setBlockMenu(null); }}
             onDuplicate={() => { duplicateBlocks(selected.length > 1 ? selected : [b.id]); setBlockMenu(null); }}
             onTurnInto={(t) => { turnInto(b.id, t); setBlockMenu(null); setSelected([]); }}
-            onColor={(c) => { (selected.length > 1 ? selected : [b.id]).forEach((id) => updateBlock(id, { color: c === 'default' ? undefined : c })); setBlockMenu(null); }}
+            onColor={(c) => { rememberColor(c); if (b.type === 'callout') rememberCallout({ color: c }); (selected.length > 1 ? selected : [b.id]).forEach((id) => updateBlock(id, { color: c === 'default' ? undefined : c })); setBlockMenu(null); }}
           />
         );
       })()}
       {iconPicker && (
-        <EmojiPicker anchor={iconPicker.anchor} onClose={() => setIconPicker(null)} onSelect={(e) => updateBlock(iconPicker.id, { icon: e })} />
+        <EmojiPicker anchor={iconPicker.anchor} onClose={() => setIconPicker(null)} onSelect={(e) => { updateBlock(iconPicker.id, { icon: e }); rememberCallout({ icon: e }); }} />
       )}
       {box && (
         <div className="select-box" style={{
