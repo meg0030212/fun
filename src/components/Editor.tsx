@@ -15,7 +15,8 @@ import { Icon } from './Icons';
 import { BlockContentExtra } from './Blocks';
 import { navigate, setUI, toast } from '../ui';
 import { attachCrossSelect } from '../crossSelect';
-import { blocksToMarkdown, markdownToBlocks } from '../markdown';
+import { blocksToHtml, blocksToMarkdown, markdownToBlocks } from '../markdown';
+import { copyBlocks, pastedBlocks } from '../blockClipboard';
 import { EmojiPicker } from './EmojiPicker';
 import { calloutDefaults, rememberCallout, rememberColor } from '../lastStyle';
 
@@ -645,15 +646,68 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
   };
 
   /* ---------- paste ---------- */
+  /** copy the given blocks (with their nested children) as blocks + Markdown + HTML */
+  const copySelected = (ids: string[]) => {
+    const s0 = getState();
+    const all = s0.pages[pageId]?.blocks || [];
+    const out: Block[] = [];
+    let skippedDb = false;
+    for (let i = 0; i < all.length; i++) {
+      if (!ids.includes(all[i].id)) continue;
+      const end = subtreeEnd(all, i);
+      for (let k = i; k < end; k++) {
+        const x = all[k];
+        if (x.type === 'database') { skippedDb = true; continue; }
+        if (x.type === 'page' && x.pageId) {
+          // a sub-page can't live in two places: copy it as a link to the page
+          const sp = s0.pages[x.pageId];
+          const icon = sp?.icon && !/^(https?:|data:)/.test(sp.icon) ? sp.icon : '📄';
+          out.push({ ...newBlock('text'), indent: x.indent, html: `<a class="mention" contenteditable="false" data-page-id="${x.pageId}" href="#p-${x.pageId}"><span class="mention-icon">${icon}</span><span class="mention-title">${escapeHtml(sp?.title || '未命名')}</span></a>` });
+        } else out.push(JSON.parse(JSON.stringify(x)));
+      }
+      i = end - 1;
+    }
+    if (!out.length) { if (skippedDb) toast('資料庫區塊無法直接複製'); return; }
+    const base = Math.min(...out.map((x) => x.indent || 0));
+    out.forEach((x) => (x.indent = (x.indent || 0) - base));
+    const md = blocksToMarkdown({ ...(s0.pages[pageId] as Page), title: '', blocks: out }, s0);
+    copyBlocks(out, md, blocksToHtml(out, s0));
+    if (skippedDb) toast('資料庫區塊無法直接複製，其餘已複製');
+  };
+
+  /** insert pasted blocks after `b` (and its children), or in place of `b` when replace; returns the new ids */
+  const pasteBlocksAfter = (b: Block, bs: Block[], replace: boolean): string[] => {
+    bs.forEach((x) => (x.indent = (x.indent || 0) + (b.indent || 0)));
+    setBlocks(pageId, (arr) => {
+      const i = arr.findIndex((x) => x.id === b.id);
+      if (i < 0) { arr.push(...bs); return; }
+      if (replace) arr.splice(i, 1, ...bs);
+      else arr.splice(subtreeEnd(arr as Block[], i), 0, ...bs);
+    });
+    return bs.map((x) => x.id);
+  };
+
   const handlePaste = (b: Block, e: React.ClipboardEvent<HTMLDivElement>, el: HTMLDivElement) => {
     if (b.type === 'code') {
       e.preventDefault();
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
       return;
     }
+    const copied = pastedBlocks(e.clipboardData);
+    if (copied) {
+      e.preventDefault();
+      const ids = pasteBlocksAfter(b, copied, !el.textContent && b.type === 'text');
+      const lastB = getState().pages[pageId]?.blocks.find((x) => x.id === ids[ids.length - 1]);
+      if (lastB && TEXT_TYPES.includes(lastB.type)) focusBlock(lastB.id, 'end');
+      else setSelected(ids);
+      return;
+    }
     const files = Array.from(e.clipboardData.files || []);
     const img = files.find((f) => f.type.startsWith('image/'));
-    if (img) {
+    // apps such as Word / Pages put a picture of the text next to the text itself: paste the text then
+    const hasText = !!e.clipboardData.getData('text/plain').trim();
+    const htmlOnlyImage = /^\s*(<[^>]+>\s*)*<img[^>]*>(\s*<[^>]+>)*\s*$/i.test(e.clipboardData.getData('text/html') || '');
+    if (img && (!hasText || htmlOnlyImage)) {
       e.preventDefault();
       readFileAsDataURL(img).then((url) => {
         const nb = newBlock('image', { url, indent: b.indent });
@@ -792,9 +846,7 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
         duplicateBlocks(sel);
       } else if (mod && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'x')) {
         e.preventDefault();
-        const p = getState().pages[pageId];
-        const picked = { ...p, title: '', blocks: p.blocks.filter((b) => sel.includes(b.id)) };
-        navigator.clipboard?.writeText(blocksToMarkdown(picked as Page, getState())).catch(() => {});
+        copySelected(sel);
         if (e.key.toLowerCase() === 'x') { removeBlocks(sel); setSelected([]); }
         else toast('已複製區塊');
       } else if (mod && e.key.toLowerCase() === 'a') {
@@ -805,9 +857,28 @@ export function Editor({ page, readOnly }: { page: Page; readOnly?: boolean }) {
         sel.forEach((id) => indentBlock(id, e.shiftKey ? -1 : 1));
       }
     };
+    // Ctrl+V with blocks selected: paste below the last selected block
+    const onPasteSel = (e: ClipboardEvent) => {
+      const ae = document.activeElement as HTMLElement | null;
+      if (readOnly || (ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'))) return;
+      const sel = selectedRef.current;
+      const vis = visibleRef.current.filter((v) => sel.includes(v.b.id));
+      const after = vis[vis.length - 1]?.b;
+      if (!after) return;
+      let bs = pastedBlocks(e.clipboardData);
+      if (!bs) {
+        const text = e.clipboardData?.getData('text/plain') || '';
+        if (!text.trim()) return;
+        bs = markdownToBlocks(text);
+      }
+      if (!bs.length) return;
+      e.preventDefault();
+      const ids = pasteBlocksAfter(after, bs, false);
+      setSelected(ids);
+    };
     // attach on next tick so the key event that created the selection doesn't reach it
-    const t = window.setTimeout(() => document.addEventListener('keydown', onKey), 0);
-    return () => { window.clearTimeout(t); document.removeEventListener('keydown', onKey); };
+    const t = window.setTimeout(() => { document.addEventListener('keydown', onKey); document.addEventListener('paste', onPasteSel); }, 0);
+    return () => { window.clearTimeout(t); document.removeEventListener('keydown', onKey); document.removeEventListener('paste', onPasteSel); };
   }, [selected.length > 0]); // eslint-disable-line
 
   /* ---------- text selection across blocks (Shift+arrows / Shift+click / drag) ---------- */

@@ -145,7 +145,12 @@ export function blocksToMarkdown(page: Page, s: State): string {
 }
 
 export function blocksToHtmlDoc(page: Page, s: State): string {
-  const body = page.blocks.map((b) => {
+  const body = blocksToHtml(page.blocks, s);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(page.title)}</title><style>body{font-family:-apple-system,"Segoe UI",sans-serif;max-width:720px;margin:40px auto;color:#37352f;line-height:1.6}blockquote{border-left:3px solid #37352f;padding-left:14px}pre{background:#f7f6f3;padding:16px}code{background:rgba(135,131,120,.15);padding:2px 4px;border-radius:3px}</style></head><body><h1>${page.icon || ''} ${escapeHtml(page.title)}</h1>${body}</body></html>`;
+}
+
+export function blocksToHtml(blocks: Block[], s: State): string {
+  return blocks.map((b) => {
     switch (b.type) {
       case 'h1': return `<h1>${b.html}</h1>`;
       case 'h2': return `<h2>${b.html}</h2>`;
@@ -163,5 +168,4 @@ export function blocksToHtmlDoc(page: Page, s: State): string {
       default: return `<p style="margin-left:${b.indent * 24}px">${b.html}</p>`;
     }
   }).join('\n');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(page.title)}</title><style>body{font-family:-apple-system,"Segoe UI",sans-serif;max-width:720px;margin:40px auto;color:#37352f;line-height:1.6}blockquote{border-left:3px solid #37352f;padding-left:14px}pre{background:#f7f6f3;padding:16px}code{background:rgba(135,131,120,.15);padding:2px 4px;border-radius:3px}</style></head><body><h1>${page.icon || ''} ${escapeHtml(page.title)}</h1>${body}</body></html>`;
 }
